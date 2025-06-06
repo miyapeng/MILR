@@ -1,7 +1,5 @@
 import re
 from termcolor import colored
-from prompts.vera_prompts import get_vera_prompt
-from prompts.vera_prompts import VERA_ANSWER_SYMBOL
 import torch
 
 class RewardModel(object):
