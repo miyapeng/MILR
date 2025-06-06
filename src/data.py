@@ -2,7 +2,7 @@
 Data api
 """
 from datasets import load_dataset, load_from_disk
-from prompts import gsm8k_prompt, MATH_500_prompt, AIME_2024_prompt
+from prompts import get_dataset
 
 def get_dataset(data_name_or_path, tokenizer, prompt_idx):
     """
@@ -15,34 +15,14 @@ def get_dataset(data_name_or_path, tokenizer, prompt_idx):
     """
 
     ### Load dataset ### 
-    if "gsm8k" in data_name_or_path:
-        try:
-            dataset = load_from_disk(data_name_or_path)['test']
-        except:
-            dataset = load_dataset("openai/gsm8k", "socratic")["test"]
-        question_col = "question"
-        answer_col = "answer"
-
-    elif "MATH-500" in data_name_or_path:
-        try:
-            dataset = load_from_disk(data_name_or_path)['test']
-        except:
-            dataset = load_dataset("HuggingFaceH4/MATH-500")["test"]
-        question_col = "problem"
-        answer_col = "answer"
-
-    elif "AIME_2024" in data_name_or_path:
-        try:
-            dataset = load_from_disk(data_name_or_path)
-        except:
-            dataset = load_dataset("Maxwell-Jia/AIME_2024")['train']
-        question_col = "Problem"
-        answer_col = "Answer"
+    # TODO:
+    if "xxxx" in data_name_or_path:
 
     else:
         raise ValueError(f"Unsupported dataset: {data_name_or_path}")
 
     # preprocess dataset
+    # Format the input for the model in the key {"formatted": }
     def preprocess_function(examples):
         '''
         Preprocess dataset
@@ -56,12 +36,9 @@ def get_dataset(data_name_or_path, tokenizer, prompt_idx):
         formatted = []
         questions = examples[question_col]
         for q in questions:
-            if "gsm8k" in data_name_or_path:
-                messages = gsm8k_prompt(q, prompt_idx)
-            elif "MATH-500" in data_name_or_path:
-                messages = MATH_500_prompt(q, prompt_idx)
-            elif "AIME_2024" in data_name_or_path:
-                messages = AIME_2024_prompt(q, prompt_idx)
+            # TODO
+            if "xxx" in data_name_or_path:
+                messages = get_prompt(q, prompt_idx)
             else:
                 raise ValueError(f"Unsupported dataset: {data_name_or_path}")
 
