@@ -4,10 +4,15 @@
 ```bash
 conda create -n latentseek python=3.10
 conda activate latentseek
-pip3 install torch torchvision torchaudio
-pip install transformers datasets tqdm accelerate
-pip install termcolor
+pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt
 
+#install Geneval configs
+#You may meet package counters, it doesn't matter`
+pip install -U openmim
+mim install mmengine mmcv-full==1.7.2
+cd src/rewards
+./evaluation/download_models.sh "<OBJECT_DETECTOR_FOLDER>/"
 ```
 
 ## Usage
