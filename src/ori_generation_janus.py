@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "5" 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2" 
 import PIL.Image
 from PIL import Image
 import random
@@ -127,7 +127,7 @@ def original_generation(
             current_input_ids = torch.cat([current_input_ids, next_token_id.unsqueeze(0)], dim=-1)
 
     # final answer
-    text_final_input_ids = current_input_ids.clone().cpu()
+    text_final_input_ids = current_input_ids.clone().clone().cpu()
     enhanced_text = tokenizer.decode(generated_text_ids, skip_special_tokens=True)
     print(enhanced_text)
 
@@ -215,13 +215,13 @@ def original_generation(
     return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids.cpu(), generated_image_tokens.cpu()
 
 
-model_path = "deepseek-ai/Janus-Pro-7B"
-vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
+# model_path = "deepseek-ai/Janus-Pro-7B"
+# vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
 
-vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
-    model_path, trust_remote_code=True
-)
-vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
-input_text = "a photo of two toothbrushes."
-answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
-print(f"Generated image size: {answer.size}")
+# vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
+#     model_path, trust_remote_code=True
+# )
+# vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
+# input_text = "a photo of two toothbrushes."
+# answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
+# print(f"Generated image size: {answer.size}")

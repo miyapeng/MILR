@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 from PIL import Image, ImageOps
 from termcolor import colored
+import tempfile
 
 import mmdet
 from mmdet.apis import inference_detector, init_detector
@@ -189,11 +190,33 @@ class RewardModel(object):
         Returns:
             int: reward (1 or 0)
         """
+        tmp_path = None
         try:
-            metadata = json.loads(solution)
-            reward, reason = self.evaluate_image(image, metadata)
-            print(colored(f"[Eval] Image: {os.path.basename(image)} => Reward: {reward}, Reason: {reason}", "green" if reward else "red"))
+            if isinstance(solution, dict):
+                metadata = json.loads(json.dumps(solution))  # 安全转换：dict → str → dict（保持结构）
+            elif isinstance(solution, str):
+                metadata = json.loads(solution)              # 原始逻辑
+
+            tmp_path = None
+            if isinstance(image, Image.Image):
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                    image.save(tmp.name)
+                    tmp_path = tmp.name
+                    image_path = tmp_path
+            elif isinstance(image, str):
+                image_path = image
+            else:
+                raise ValueError("Unsupported image format.")
+
+            reward, reason = self.evaluate_image(image_path, metadata)
+            print(colored(f"[Eval] Image: {os.path.basename(image_path)} => Reward: {reward}, Reason: {reason}", "green" if reward else "red"))
             return reward
+
         except Exception as e:
             print(colored(f"[Error] Evaluation failed: {e}", "red"))
             return 0
+
+        finally:
+            # 清理临时图片
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)

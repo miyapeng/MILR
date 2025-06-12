@@ -109,7 +109,7 @@ def main(args):
     optimized_length = 0
     fitten_length = 0
     model_name = args.model_name_or_path.split("/")[-1]
-    data_name = args.dataset.split("/")[-1]
+    data_name = "geneval"
 
     output_dir = f"{args.output_dir}/{model_name}-{data_name}-k{args.k}-lr{args.lr}-SolIdx{args.solver_prompt_idx}"
 
@@ -130,7 +130,7 @@ def main(args):
         fitten_length = logistics["fitten_length"]
 
     
-    print(f"Start to evaluate {args.dataset} from {start_data_idx} to {end_data_idx}...")
+    print(f"Start to evaluate {data_name} from {start_data_idx} to {end_data_idx}...")
 
     data_idx_list = range(start_data_idx, end_data_idx)
     for i in tqdm(data_idx_list):
@@ -140,23 +140,25 @@ def main(args):
         if not os.path.exists(f"{output_dir}/test"):
             os.makedirs(f"{output_dir}/test")
 
-        true_answer = extract_true_answer(example["answer"], name=args.dataset)
+        prompt = example["prompt"]
+        task_tag = example["tag"]
 
-        print(f"Question: {example['question']}")
-        print(f"True answer: {true_answer}")
-        if true_answer is None:
+        print(f"Task_tag: {task_tag}")
+        print(f"prompt: {prompt}")
+        if prompt is None:
             continue
 
-        original_output, hidden_states_list, input_ids = original_generation(
-                input_text=example["formatted"],
-                model=model,
-                tokenizer=tokenizer,
-                device=device,)
-        
+        answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(
+                input_text=prompt,
+                model=vl_gpt,
+                vl_chat_processor=vl_chat_processor,
+                device=device)
+
         optimized_output, reward_history, new_original_length, new_optimized_length, new_update_length = optimized_generation(
                 reward_model=reward_model,
-                model=model,
-                tokenizer=tokenizer,
+                data=dataset[i],
+                model=vl_gpt,
+                tokenizer=vl_chat_processor,
                 device=device,
                 question=example["question"],
                 input_text=example["formatted"],
