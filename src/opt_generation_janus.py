@@ -1,7 +1,7 @@
 # Janus-Pro optimized generation: latent optimization for prompt (text) and/or image hidden states
 # Provides three distinct branches: "text", "image", and "both".
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "4" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
 
 import torch
 import numpy as np
@@ -101,7 +101,7 @@ def optimized_generation(
     text_hidden_states_list: list,   # List[Tensor] from CoT
     text_final_input_ids: torch.Tensor,
     image_hidden_states_list: list,  # List[Tensor] from image gen
-    image_prompt_ids: torch.Tensor,
+    image_prompt_embed: torch.Tensor,
     generated_image_tokens: torch.Tensor,
     start_index=0,
     max_text_steps=10,
@@ -114,6 +114,8 @@ def optimized_generation(
     image_token_num=576,
     img_size=384,
     patch_size=16,
+    cfg_weight = 5.0,
+    temperature = 1.0,
     optimize_mode="both",  # must be one of: "text", "image", "both"
 ):
     """
@@ -158,21 +160,22 @@ def optimized_generation(
         conversations=conversation, sft_format=vl_chat_processor.sft_format, system_prompt=system_prompt
     )
 
-    # === Text-only branch ===
+   # === Text-only branch ===
     if optimize_mode == "text":
         total = len(text_hidden_states_list)
         update_length = min(int(k * total), total)
+        # 1. 构建前缀 base_input_ids
+        inputs = tokenizer([sft_prompt], return_tensors="pt").to(device)
+        base_input_ids = inputs.input_ids.clone()
+        
         if update_length <= 0:
             print("Update Length Zero!!!")
             return None, reward_history, total, 0, update_length
 
-        # 1. 构建前缀 base_input_ids
-        inputs = tokenizer([sft_prompt], return_tensors="pt", padding=True, padding_side="right", add_special_tokens=True).to(device)
-        base_input_ids = inputs.input_ids.clone()
-
         # 2. 构建 base_ids（前缀 + start_index），作为优化起点
-        base_ids = text_final_input_ids[:, :base_input_ids.shape[-1] + start_index].to(device)
-        original_seq = base_ids[0].tolist()
+        original_seq = []
+        # the prompt
+        original_seq.extend(text_final_input_ids[0][len(base_input_ids[-1]): len(base_input_ids[-1]) + start_index])
 
         # 3. 构建需要优化的隐藏状态
         optimized_states = torch.nn.Parameter(torch.stack(
@@ -182,11 +185,13 @@ def optimized_generation(
         )
         optimizer = torch.optim.Adam([optimized_states], lr=lr)
 
+        input_ids = text_final_input_ids[:, : len(base_input_ids[-1]) + start_index]
+        base_input_ids = input_ids.clone()
         new_img = None
-        tokens = None
 
         for i in range(max_text_steps):
-            if current_reward > reward_threshold:
+            input_ids = base_input_ids.clone().to(device)
+            if current_reward < reward_threshold:
                 break
 
             optimizer.zero_grad()
@@ -208,13 +213,15 @@ def optimized_generation(
             generated_seq = []
             generated_seq.extend(original_seq)
             with torch.no_grad():
-                updated_token_ids = torch.argmax(model.language_model.lm_head(optimized_states), dim=-1)
+                updated_prob = torch.softmax(model.language_model.lm_head(optimized_states), dim=-1) + 1e-8
+                updated_token_ids = torch.argmax(updated_prob, dim=-1)
                 updated_token_ids = updated_token_ids.squeeze(-1)
                 generated_seq.extend(updated_token_ids.tolist())
 
                 # 拼接为新的 input_ids
-                updated_input_ids = torch.cat([base_ids, updated_token_ids.unsqueeze(0)], dim=-1)
+                updated_input_ids = torch.cat([input_ids, updated_token_ids.unsqueeze(0)], dim=-1)
 
+            with torch.no_grad():
                 # 后续 token 自动生成直到 eos 或 max_text_tokens
                 cnt = 0
                 while True:
@@ -222,7 +229,7 @@ def optimized_generation(
                     last_hidden = outputs[0][:, -1]
                     logits = model.language_model.lm_head(last_hidden)
                     next_token_id = torch.argmax(logits, dim=-1)
-                    token_str = tokenizer.decode(next_token_id.item(), skip_special_tokens=False)
+                    token_str = tokenizer.decode(next_token_id.item())
 
                     generated_seq.append(next_token_id.item())
                     updated_input_ids = torch.cat([updated_input_ids, next_token_id.unsqueeze(0)], dim=-1)
@@ -232,16 +239,18 @@ def optimized_generation(
                     if cnt > max_text_tokens:
                         break
 
-            new_token_ids = generated_seq[len(original_seq):]
-            new_generated_text = tokenizer.decode(new_token_ids, skip_special_tokens=True)
-            print(f"New Optimized Answer: {new_generated_text}")
+            # new_token_ids = generated_seq[len(original_seq):]
+            # new_generated_text = tokenizer.decode(new_token_ids, skip_special_tokens=True)
+            # print(f"New Optimized Answer: {new_generated_text}")
             del outputs, last_hidden, next_token_id, token_str
             del logits, updated_token_ids, updated_input_ids
             torch.cuda.empty_cache()
+            new_generated_text = tokenizer.decode(generated_seq,skip_special_tokens=True)
+            print(f"New Optimized Answer: {new_generated_text}")
 
             image_gen_prompt = f"{data['prompt']}. {new_generated_text}"
             # 生成图像 → 评估 reward
-            save_path = f"/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/opt_images/optimized_image_{i}.png"
+            save_path = f"/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/opt_images/text/optimized_image_{i}.png"
             new_img = generate_image_from_prompt(model, vl_chat_processor, image_gen_prompt, save_path=save_path)
             new_reward = reward_model.get_reward(new_img, data)
             print(f"-- Text Branch New Reward: {new_reward}")
@@ -251,93 +260,118 @@ def optimized_generation(
         # 最终返回（你可以选择返回 new_img、tokens 等）
         return new_img, reward_history, total, len(generated_seq), update_length
 
-    # Branch: image-only
+        # 最终返回（你可以选择返回 new_img、tokens 等）
+        return new_img, reward_history, total, len(generated_seq), update_length
+    
     elif optimize_mode == "image":
-        total2 = len(image_hidden_states_list)
-        img_upd = min(int(k * total2), total2)
-        if img_upd > 0:
-            i_states = torch.stack([
-                s.clone().detach().requires_grad_(True)
-                for s in image_hidden_states_list[:img_upd]
-            ])
-            i_states = torch.nn.Parameter(i_states)
-            opt2 = torch.optim.Adam([i_states], lr=lr)
-            for _ in range(max_image_steps):
-                if current_reward > reward_threshold:
-                    break
-                opt2.zero_grad()
-                logits2 = model.gen_head(i_states)
-                lps = torch.log_softmax(logits2, dim=-1)
-                nxt = torch.argmax(lps, dim=-1)
-                seq = torch.cat([tokens[:start_index], nxt.cpu()])
-                r2 = reward_model.get_reward(image, data)
-                loss2 = -r2
-                loss2.backward()
-                if grad_clip:
-                    torch.nn.utils.clip_grad_norm_([i_states], grad_clip)
-                opt2.step()
-                tokens = seq
-                current_reward = r2
-                reward_history.append(r2)
+        total = len(image_hidden_states_list)
+        update_length = min(int(k * total), total)
+        if update_length <= 0:
+            print("Update Length Zero!!!")
+            return None, reward_history, total, 0, update_length
+
+        # === Step 1: 直接使用已处理好得image prompt embedding ===
+        image_prompt_embed = image_prompt_embed.to(device)  # [1, T]
+
+        # === Step 2: 优化图像 hidden_states ===
+        optimized_states = torch.nn.Parameter(torch.stack([
+            s.clone().detach().to(device).requires_grad_(True)
+            for s in image_hidden_states_list[start_index:start_index + update_length]
+        ]))  # [update_len, H]
+        optimizer = torch.optim.Adam([optimized_states], lr=lr)
+
+        new_img = None
+        for i in range(max_image_steps):
+            if current_reward < reward_threshold:
+                break
+
+            optimizer.zero_grad()
+
+            # === Step 1: 计算 loss（基于当前 optimized_states）===
+            logits = model.gen_head(optimized_states)  # [update_length, 2, vocab]
+            logit_cond = logits[:, 0, :]  # [update_length, vocab]
+            logit_uncond = logits[:, 1, :]  # [update_length, vocab]
+            fused_logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)  # [update_length, vocab]
+
+            probs = torch.softmax(fused_logits / temperature, dim=-1) + 1e-8
+            token_ids = torch.argmax(probs, dim=-1)  # [update_length]
+            log_pi = torch.log(probs[torch.arange(update_length), token_ids] + 1e-10)
+
+            loss = - current_reward * log_pi.sum()
+            print(f"-- Image Branch Loss: {loss.item()}")
+            loss.backward()
+            optimizer.step()
+
+            # === Step 3: 拼接 prompt_embeds + optimized_states，生成图像 token ===
+            with torch.no_grad():
+                logits = model.gen_head(optimized_states)  # updated states
+                logit_cond = logits[:, 0, :]
+                logit_uncond = logits[:, 1, :]
+                fused_logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
+                probs = torch.softmax(fused_logits / temperature, dim=-1)
+
+                sampled_token_ids = torch.multinomial(probs, num_samples=1).squeeze(-1)  # [update_length]
+                # 每个 token_id → repeat 成 [2] → prepare embedding
+                repeated_ids = sampled_token_ids.repeat_interleave(2).view(-1, 2)
+                flat_ids = repeated_ids.reshape(-1)  # [2 * update_length]
+
+                optimized_token_embeds = model.prepare_gen_img_embeds(flat_ids).reshape(update_length, 2, -1)
+                optimized_token_embeds = optimized_token_embeds.permute(1, 0, 2)  # [2, update_len, H]
+
+                # 拼接到 image_prompt_embed 后形成最终 inputs_embeds_img
+                inputs_embeds_img = torch.cat([image_prompt_embed, optimized_token_embeds], dim=1)  # [2, T_total, H]
+
+                current_embedding = inputs_embeds_img
+                generated_tokens = torch.zeros((1, image_token_num), dtype=torch.int).to(device)
+                outputs = None
+                for j in range(update_length, image_token_num):
+                    outputs = model.language_model.model(
+                        inputs_embeds=current_embedding,
+                        use_cache=True,
+                        past_key_values=outputs.past_key_values if j > update_length else None
+                    )
+                    last_hidden = outputs.last_hidden_state[:, -1, :]  # [1, H]
+                    logits = model.gen_head(last_hidden)
+                    logit_cond = logits[0::2, :]
+                    logit_uncond = logits[1::2, :]
+                    logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
+                    next_token = torch.multinomial(torch.softmax(logits / temperature, dim=-1), num_samples=1)  # [1]
+                    generated_tokens[:, j] = next_token.squeeze(dim=-1)
+
+                    next_token = next_token.repeat(1, 2).view(-1)
+                    next_embed = model.prepare_gen_img_embeds(next_token).unsqueeze(1)
+                    current_embedding = next_embed
+                    
+                # 替换前 update_length 的 token 为优化结果
+                generated_tokens[:, :update_length] = sampled_token_ids
+
+                # === decode image ===
+                decoded = model.gen_vision_model.decode_code(
+                    generated_tokens.to(dtype=torch.int),
+                    shape=[1, 8, img_size // patch_size, img_size // patch_size]
+                )
+                decoded = decoded.detach().to(torch.float32).cpu().numpy().transpose(0, 2, 3, 1)
+                decoded = np.clip((decoded + 1) / 2 * 255, 0, 255).astype(np.uint8)
+                new_img = PIL.Image.fromarray(decoded[0])
+
+            save_path = f"/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/opt_images/image/optimized_image_{i}.png"
+            if save_path:
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                new_img.save(save_path)
+
+            new_reward = reward_model.get_reward(new_img, data)
+            print(f"-- Image Branch New Reward: {new_reward}")
+            reward_history.append(new_reward)
+            current_reward = new_reward
+
+        return new_img, reward_history, total, image_token_num, update_length
     # Branch: both
     else:  # "both"
         # first text, then image
         # reuse text branch logic to update text_hidden_states_list and tokens
         # then reuse image branch on updated tokens
         # Text optimization
-        total = len(text_hidden_states_list)
-        text_upd = min(int(k * total), total)
-        if text_upd > 0:
-            states = torch.stack([
-                s.clone().detach().requires_grad_(True)
-                for s in text_hidden_states_list[start_index:start_index + text_upd]
-            ])
-            states = torch.nn.Parameter(states)
-            opt = torch.optim.Adam([states], lr=lr)
-            base_ids = text_final_input_ids[:, :start_index + 1].to(device)
-            for _ in range(max_text_steps):
-                if current_reward > reward_threshold:
-                    break
-                opt.zero_grad()
-                seq = base_ids[0].tolist()
-                for h in states:
-                    lid = torch.argmax(model.language_model.lm_head(h), dim=-1).item()
-                    seq.append(lid)
-                toks = generate_image_from_text(seq)
-                r = reward_model.get_reward(question, toks)
-                (-r).backward()
-                if grad_clip:
-                    torch.nn.utils.clip_grad_norm_([states], grad_clip)
-                opt.step()
-                tokens = toks; current_reward = r; reward_history.append(r)
-        # Image optimization on final tokens
-        total2 = len(image_hidden_states_list)
-        img_upd = min(int(k * total2), total2)
-        if img_upd > 0:
-            i_states = torch.stack([
-                s.clone().detach().requires_grad_(True)
-                for s in image_hidden_states_list[:img_upd]
-            ])
-            i_states = torch.nn.Parameter(i_states)
-            opt2 = torch.optim.Adam([i_states], lr=lr)
-            for _ in range(max_image_steps):
-                if current_reward > reward_threshold:
-                    break
-                opt2.zero_grad()
-                logits2 = model.gen_head(i_states)
-                lps = torch.log_softmax(logits2, dim=-1)
-                nxt = torch.argmax(lps, dim=-1)
-                seq2 = torch.cat([tokens[:start_index], nxt.cpu()])
-                r2 = reward_model.get_reward(question, seq2)
-                (-r2).backward()
-                if grad_clip:
-                    torch.nn.utils.clip_grad_norm_([i_states], grad_clip)
-                opt2.step()
-                tokens = seq2; current_reward = r2; reward_history.append(r2)
-
-    # Decode final tokens to image
-    final_img = vl_chat_processor.decode_image(tokens.numpy())
-    return final_img, reward_history
+        return
 
 model_path = "deepseek-ai/Janus-Pro-7B"
 vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
@@ -355,6 +389,6 @@ reward_model = RewardModel(
     options={"clip_model": "ViT-L-14"}
 )
 
-answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
+answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
 torch.cuda.empty_cache()
-new_img, reward_history, total, generated_seq, update_length = optimized_generation(reward_model, answer, data, vl_gpt, vl_chat_processor, torch.device("cuda"), text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens, optimize_mode="text")
+new_img, reward_history, total, generated_seq, update_length = optimized_generation(reward_model, answer, data, vl_gpt, vl_chat_processor, torch.device("cuda"), text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens, optimize_mode="text")

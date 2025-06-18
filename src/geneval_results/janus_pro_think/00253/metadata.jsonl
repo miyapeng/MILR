@@ -1,0 +1,1 @@
+{"tag": "counting", "include": [{"class": "parking meter", "count": 2}], "exclude": [{"class": "parking meter", "count": 3}], "prompt": "a photo of two parking meters"}

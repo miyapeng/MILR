@@ -1,0 +1,1 @@
+{"tag": "position", "include": [{"class": "boat", "count": 1}, {"class": "bus", "count": 1, "position": ["above", 0]}], "prompt": "a photo of a bus above a boat"}

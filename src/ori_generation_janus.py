@@ -12,19 +12,19 @@ import copy
 from transformers import AutoModelForCausalLM
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 
-def seed_all(seed):
-    """Set all random seeds to ensure reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-    # The two lines below are known to cause slowdowns, but ensure reproducibility
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+# def seed_all(seed):
+#     """Set all random seeds to ensure reproducibility."""
+#     random.seed(seed)
+#     np.random.seed(seed)
+#     torch.manual_seed(seed)
+#     if torch.cuda.is_available():
+#         torch.cuda.manual_seed(seed)
+#         torch.cuda.manual_seed_all(seed)
+#     # The two lines below are known to cause slowdowns, but ensure reproducibility
+#     torch.backends.cudnn.deterministic = True
+#     torch.backends.cudnn.benchmark = False
 
-seed_all(42)
+# seed_all(42)
 
 def original_generation(
     input_text: str,
@@ -184,13 +184,13 @@ def original_generation(
             hidden_states = outputs.last_hidden_state
             
             image_hidden_states_list.append(hidden_states[:, -1, :].clone().cpu())
-
+            
             logits = model.gen_head(hidden_states[:, -1, :])
             logit_cond = logits[0::2, :]
             logit_uncond = logits[1::2, :]
             logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
             
-            probs = torch.softmax(logits / temperature, dim=-1)
+            probs = torch.softmax(logits/temperature, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1)
             generated_image_tokens[:, k] = next_token.squeeze(dim=-1)
             next_token = next_token.repeat(1, 2).view(-1)
@@ -212,7 +212,7 @@ def original_generation(
         PIL.Image.fromarray(visual_img[i]).save(save_path)
     answer = Image.fromarray(visual_img[0])
 
-    return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids.cpu(), generated_image_tokens.cpu()
+    return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, inputs_embeds_img.cpu(), generated_image_tokens.cpu()
 
 
 # model_path = "deepseek-ai/Janus-Pro-7B"

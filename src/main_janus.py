@@ -22,9 +22,6 @@ def parse_args():
     parser.add_argument("--start_data_idx", type=int, default=0, help="Start index of the data to evaluate")
     parser.add_argument("--end_data_idx", type=int, default=1319, help="End index of the data to evaluate")
 
-    # prompt
-    parser.add_argument("--solver_prompt_idx", type=int, default=0, help="Index of the solver prompt")
-
     # seed
     parser.add_argument("--seed", type=int, default=42, help="Random seed for initialization")
 
@@ -37,7 +34,7 @@ def parse_args():
     parser.add_argument("--device", type=str, default=None)
 
     # reward model
-    parser.add_argument("--reward_threshold", type=float, default=-0.2, help="Threshold for reward to stop optimization")
+    parser.add_argument("--reward_threshold", type=float, default=0.1, help="Threshold for reward to stop optimization")
 
     parser.add_argument("--resume", action="store_true", help="Resume training from the last checkpoint")
     return parser.parse_args()
@@ -58,6 +55,24 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
+def judge_answer(output: str, reward_model, data):
+    '''
+    Judge whether the output is correct
+
+    Args:
+        output: model output
+        reward_model: reward model to judge the output
+        data: data to judge the output
+
+    Returns:
+        bool: whether the output is correct
+    '''
+        
+    reward_score = reward_model.get_reward(output,data)
+    if reward_score == 1:
+        return False
+    elif reward_score == 0:
+        return True
 
 # evaluate function 
 def main(args):
@@ -111,7 +126,7 @@ def main(args):
     model_name = args.model_name_or_path.split("/")[-1]
     data_name = "geneval"
 
-    output_dir = f"{args.output_dir}/{model_name}-{data_name}-k{args.k}-lr{args.lr}-SolIdx{args.solver_prompt_idx}"
+    output_dir = f"{args.output_dir}/{model_name}-{data_name}-k{args.k}-lr{args.lr}"
 
     start_data_idx = max(0, args.start_data_idx)
     end_data_idx = min(args.end_data_idx, len(dataset))
@@ -148,24 +163,27 @@ def main(args):
         if prompt is None:
             continue
 
-        answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(
+        img, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens = original_generation(
                 input_text=prompt,
                 model=vl_gpt,
                 vl_chat_processor=vl_chat_processor,
                 device=device)
-
-        optimized_output, reward_history, new_original_length, new_optimized_length, new_update_length = optimized_generation(
+        torch.cuda.empty_cache()
+        new_img, reward_history, ori_total_length, generated_seq, update_length = optimized_generation(
                 reward_model=reward_model,
-                data=dataset[i],
+                image = img,
+                data=example,
                 model=vl_gpt,
                 tokenizer=vl_chat_processor,
                 device=device,
-                question=example["question"],
-                input_text=example["formatted"],
-                original_answer=original_output,
-                original_hidden_states_list=hidden_states_list, 
-                input_ids=input_ids,
-                max_num_steps=args.max_num_steps,
+                text_hidden_states_list=text_hidden_states_list,
+                text_final_input_ids=text_final_input_ids,
+                image_hidden_states_list=image_hidden_states_list,
+                image_prompt_embed=image_prompt_embed,
+                generated_image_tokens=generated_image_tokens,
+                start_index= start_data_idx,
+                max_text_steps=args.max_num_steps,
+                max_image_steps=args.max_num_steps,
                 lr=args.lr,
                 grad_clip=args.grad_clip,
                 k=args.k,
@@ -175,28 +193,20 @@ def main(args):
         update_count += (len(reward_history) - 1)   
         
         # extract answer from model response
-        original_answer = extract_answer(original_output, 
-                                         data_name=args.dataset, 
-                                         prompt_idx=args.solver_prompt_idx, 
-                                         model_name=args.model_name_or_path)
-        optimized_answer = extract_answer(optimized_output, 
-                                          data_name=args.dataset, 
-                                          prompt_idx=args.solver_prompt_idx, 
-                                          model_name=args.model_name_or_path)
-        original_length += new_original_length
-        optimized_length += new_optimized_length
-        fitten_length += (new_optimized_length - new_update_length) if len(reward_history) > 1 else 0
+        original_length += ori_total_length
+        optimized_length += generated_seq
+        fitten_length += (generated_seq - update_length) if len(reward_history) > 1 else 0
 
         # judge answer
-        if original_answer is not None:
+        if img is not None:
             original_correct_add = judge_answer(
-                    original_output, true_answer, data_name=args.dataset, prompt_idx=args.solver_prompt_idx)
+                    img, reward_model,data=example)
         else:
             original_correct_add = False
 
-        if optimized_answer is not None:
+        if new_img is not None:
             optimized_correct_add = judge_answer(
-                    optimized_output, true_answer, data_name=args.dataset, prompt_idx=args.solver_prompt_idx)
+                    new_img, reward_model, data=example)
         else:
             optimized_correct_add = False
 

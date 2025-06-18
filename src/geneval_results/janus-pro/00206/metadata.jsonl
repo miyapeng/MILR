@@ -1,0 +1,1 @@
+{"tag": "counting", "include": [{"class": "sheep", "count": 2}], "exclude": [{"class": "sheep", "count": 3}], "prompt": "a photo of two sheeps"}

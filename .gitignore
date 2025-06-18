@@ -177,3 +177,5 @@ cython_debug/
 
 geneval/
 <OBJECT_DETECTOR_FOLDER>
+
+Bagel/
