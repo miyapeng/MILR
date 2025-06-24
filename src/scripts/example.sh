@@ -1,14 +1,34 @@
-PATH_TO_DATA="openai/gsm8k" # path to the dataset (the path str should contain either "AIME_2024", "gsm8k", "MATH-500")
-PATH_TO_MODEL="/home/plm/Qwen2.5-7B-Instruct" # path to the model 
-rho=0.2 # the value of rho, which is the hyperparameter for the fractional update
-lr=0.05 # the learning rate
-solver_prompt_idx=1 # the index of the solver prompt to use (0 for "boxex", 1 for "json")
+#!/bin/bash
 
-python main.py \
-    --dataset $PATH_TO_DATA \
-    --model_name_or_path $PATH_TO_MODEL \
-    --output_dir ./output \
-    --k $rho \
-    --lr $lr \
-    --solver_prompt_idx $solver_prompt_idx \
+PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
+PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
+output_dir="./Results"
+optimize_mode="image"  # or "image"
+text_k=0.1 
+image_k=0.01 
+lr=0.01
+max_text_steps=5
+max_image_steps=15
+
+# === 设置日志文件名 ===
+if [ "$optimize_mode" = "text" ]; then
+    LOG_FILE="$output_dir/${optimize_mode}_tk${text_k}_lr${lr}_ts${max_text_steps}.txt"
+elif [ "$optimize_mode" = "image" ]; then
+    LOG_FILE="$output_dir/${optimize_mode}_ik${image_k}_lr${lr}_is${max_image_steps}.txt"
+else
+    LOG_FILE="$output_dir/${optimize_mode}_tk${text_k}_ik${image_k}_lr${lr}_ts${max_text_steps}_is${max_image_steps}.txt"
+fi
+
+# === 启动训练脚本 ===
+CUDA_VISIBLE_DEVICES=3 python main_janus.py \
+    --dataset "$PATH_TO_DATA" \
+    --model_name_or_path "$PATH_TO_MODEL" \
+    --output_dir "$output_dir" \
+    --optimize_mode "$optimize_mode" \
+    --lr "$lr" \
+    --text_k "$text_k" \
+    --image_k "$image_k" \
+    --max_text_steps "$max_text_steps" \
+    --max_image_steps "$max_image_steps" \
     --device "cuda" \
+    > "$LOG_FILE" 2>&1 &

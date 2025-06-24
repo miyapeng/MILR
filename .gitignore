@@ -176,7 +176,7 @@ cython_debug/
 .pypirc
 
 geneval/
+geneval_results/
 <OBJECT_DETECTOR_FOLDER>
 
 Bagel/
-geneval_results/
