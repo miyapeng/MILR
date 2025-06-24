@@ -1,1 +1,0 @@
-{"tag": "position", "include": [{"class": "scissors", "count": 1}, {"class": "refrigerator", "count": 1, "position": ["below", 0]}], "prompt": "a photo of a refrigerator below a scissors"}

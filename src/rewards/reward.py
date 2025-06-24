@@ -180,7 +180,7 @@ class RewardModel(object):
             if not detected[classname]:
                 del detected[classname]
         is_correct, reason = self.evaluate(image, detected, metadata)
-        return 0 if is_correct else 1, reason
+        return 0 if is_correct else -1, reason
 
     def get_reward(self, image, solution):
         """
@@ -188,7 +188,7 @@ class RewardModel(object):
             image: str, path to image
             solution: str, json string containing metadata
         Returns:
-            int: reward (1 or 0)
+            int: reward (-1 or 0)
         """
         tmp_path = None
         try:
@@ -209,7 +209,7 @@ class RewardModel(object):
                 raise ValueError("Unsupported image format.")
 
             reward, reason = self.evaluate_image(image_path, metadata)
-            print(colored(f"[Eval] Image: {os.path.basename(image_path)} => Reward: {reward}, Reason: {reason}", "red" if reward else "green"))
+            print(colored(f"[Eval] Image: {os.path.basename(image_path)} => Reward: {reward}, Reason: {reason}", "red" if reward==-1 else "green"))
             return reward
 
         except Exception as e:

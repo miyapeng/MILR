@@ -1,1 +1,0 @@
-{"tag": "position", "include": [{"class": "airplane", "count": 1}, {"class": "train", "count": 1, "position": ["below", 0]}], "prompt": "a photo of a train below an airplane"}

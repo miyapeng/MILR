@@ -206,10 +206,10 @@ def original_generation(
     visual_img = np.zeros((parallel_size, img_size, img_size, 3), dtype=np.uint8)
     visual_img[:, :, :] = dec
 
-    os.makedirs('generated_samples', exist_ok=True)
-    for i in range(parallel_size):
-        save_path = os.path.join('generated_samples', "img_{}.jpg".format(i))
-        PIL.Image.fromarray(visual_img[i]).save(save_path)
+    # os.makedirs('generated_samples', exist_ok=True)
+    # for i in range(parallel_size):
+    #     save_path = os.path.join('generated_samples', "img_{}.jpg".format(i))
+    #     PIL.Image.fromarray(visual_img[i]).save(save_path)
     answer = Image.fromarray(visual_img[0])
 
     return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, inputs_embeds_img.cpu(), generated_image_tokens.cpu()
