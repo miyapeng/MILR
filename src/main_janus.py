@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument("--image_k", type=float, default=0.01, help="Ratio of update length to the total length of hidden states")
     parser.add_argument("--max_text_steps", type=int, default=10, help="Number of text optimization iterations")
     parser.add_argument("--max_image_steps", type=int, default=10, help="Number of image optimization iterations")
+    parser.add_argument("--max_both_steps", type=int, default=10, help="Number of both(text and image) optimization iterations")
     parser.add_argument("--max_new_tokens", type=int, default=512, help="Number of generated tokens")
     parser.add_argument("--device", type=str, default=None)
 
@@ -146,8 +147,10 @@ def main(args):
 
     if args.optimize_mode == "text":
         output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.optimize_mode}-text_k{args.text_k}-steps{args.max_text_steps}-lr{args.lr}"
-    else:
+    elif args.optimize_mode == "image":
         output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.optimize_mode}-image_k{args.image_k}-steps{args.max_image_steps}-lr{args.lr}"
+    else:
+        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.optimize_mode}-text_k{args.text_k}-image_k{args.image_k}-steps{args.max_both_steps}-lr{args.lr}"
 
     start_data_idx = max(0, args.start_data_idx)
     end_data_idx = min(args.end_data_idx, len(dataset))
@@ -182,7 +185,7 @@ def main(args):
         if prompt is None:
             continue
 
-        img, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens = original_generation(
+        img, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, ori_image_prompt = original_generation(
                 input_text=prompt,
                 model=vl_gpt,
                 vl_chat_processor=vl_chat_processor,
@@ -203,8 +206,8 @@ def main(args):
                 text_final_input_ids=text_final_input_ids,
                 image_hidden_states_list=image_hidden_states_list,
                 image_prompt_embed=image_prompt_embed,
-                generated_image_tokens=generated_image_tokens,
-                start_index= start_data_idx,
+                ori_image_prompt=ori_image_prompt,
+                start_index=start_data_idx,
                 max_text_steps=args.max_text_steps,
                 max_image_steps=args.max_image_steps,
                 lr=args.lr,

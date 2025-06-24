@@ -212,7 +212,7 @@ def original_generation(
     #     PIL.Image.fromarray(visual_img[i]).save(save_path)
     answer = Image.fromarray(visual_img[0])
 
-    return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, inputs_embeds_img.cpu(), generated_image_tokens.cpu()
+    return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, inputs_embeds_img.cpu(), image_gen_prompt
 
 
 # model_path = "deepseek-ai/Janus-Pro-7B"

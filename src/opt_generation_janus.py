@@ -103,7 +103,7 @@ def optimized_generation(
     text_final_input_ids: torch.Tensor,
     image_hidden_states_list: list,  # List[Tensor] from image gen
     image_prompt_embed: torch.Tensor,
-    generated_image_tokens: torch.Tensor,
+    ori_image_prompt,
     start_index=0,
     max_text_steps=10,
     max_image_steps=10,
@@ -262,11 +262,12 @@ def optimized_generation(
             new_img = generate_image_from_prompt(model, vl_chat_processor, image_gen_prompt, save_path=save_path)
             new_reward = reward_model.get_reward(new_img, data)
             if save_base_path is not None:
-                trace_file = os.path.join(save_base_path, "text", "text_trace.jsonl")
+                trace_file = os.path.join(save_base_path, "text_trace.jsonl")
                 with open(trace_file, "a", encoding="utf-8") as f:
                     json.dump({
                         "step": i,
                         "generated_text": new_generated_text,
+                        "image_gen_prompt": image_gen_prompt,
                         "reward": float(new_reward),
                         "loss": float(loss.item()),
                         "image_path": f"optimized_image_{i}.png"
@@ -370,14 +371,22 @@ def optimized_generation(
                 decoded = np.clip((decoded + 1) / 2 * 255, 0, 255).astype(np.uint8)
                 new_img = PIL.Image.fromarray(decoded[0])
 
-            if save_base_path is not None:
-                save_dir = os.path.join(save_base_path, "image")
-                os.makedirs(save_dir, exist_ok=True)
-                save_path = os.path.join(save_dir, f"optimized_image_{i}.png")
-                new_img.save(save_path)
-
             new_reward = reward_model.get_reward(new_img, data)
             print(f"-- Image Branch New Reward: {new_reward}")
+            if save_base_path is not None:
+                trace_file = os.path.join(save_base_path, "image_trace.jsonl")
+                with open(trace_file, "a", encoding="utf-8") as f:
+                    json.dump({
+                        "step": i,
+                        "image_gen_prompt": ori_image_prompt,
+                        "reward": float(new_reward),
+                        "loss": float(loss.item()),
+                        "image_path": f"optimized_image_{i}.png"
+                    }, f, ensure_ascii=False)
+                    f.write("\n")
+                save_path = os.path.join(save_base_path, f"optimized_image_{i}.png")
+                new_img.save(save_path)
+
             reward_history.append(new_reward)
             current_reward = new_reward
 
@@ -564,11 +573,9 @@ def optimized_generation(
             current_reward = new_reward
             # ==================== Save trace ====================
             if save_base_path is not None:
-                trace_dir = os.path.join(save_base_path, "both")
-                os.makedirs(trace_dir, exist_ok=True)
-                trace_file = os.path.join(trace_dir, "both_trace.jsonl")
+                trace_file = os.path.join(save_base_path, "both_trace.jsonl")
                 # 当前生成的 image 文件路径
-                img_save_path = os.path.join(trace_dir, f"optimized_image_{i}.png")
+                img_save_path = os.path.join(save_base_path, f"optimized_image_{i}.png")
                 new_img.save(img_save_path)
                 log_data = {
                     "step": i,
