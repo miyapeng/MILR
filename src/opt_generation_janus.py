@@ -107,6 +107,7 @@ def optimized_generation(
     start_index=0,
     max_text_steps=10,
     max_image_steps=10,
+    max_both_steps=10,
     lr=0.01,
     grad_clip=None,
     text_k=0.1,
@@ -410,9 +411,26 @@ def optimized_generation(
         )
         optimizer_text = torch.optim.Adam([optimized_states], lr=lr)
 
+        # ========== Step 2: 图像优化逻辑 ==========
+        total_img = len(image_hidden_states_list)
+        img_update_length = min(int(image_k * total_img), total_img)
+        if img_update_length <= 0:
+            print("Image Update Length Zero!!!")
+            return None, reward_history, total_img, 0, img_update_length
+
+        optimized_states_img = torch.nn.Parameter(
+            torch.stack(
+                [
+                    s.clone().detach().to(device).requires_grad_(True)
+                    for s in image_hidden_states_list[start_index:start_index + img_update_length]
+                ]
+            )
+        )
+        optimizer_img = torch.optim.Adam([optimized_states_img], lr=lr)
+
         new_img = None
         generated_seq = []
-        for i in range(max_text_steps):
+        for i in range(max_both_steps):
             if current_reward > reward_threshold:
                 break
             optimizer_text.zero_grad()
@@ -421,11 +439,11 @@ def optimized_generation(
             probs = torch.softmax(logits, dim=-1) + 1e-8
             next_token_ids = torch.argmax(probs, dim=-1).squeeze(-1)
             log_pi = torch.log(
-                probs[torch.arange(update_length), next_token_ids] + 1e-10
+                probs[torch.arange(update_length), 0, next_token_ids] + 1e-10
             )
-            loss = -current_reward * log_pi.sum()
-            print(f"-- Both Text Opt Loss: {loss.item():.4f}")
-            loss.backward(retain_graph=True)
+            text_loss = -current_reward * log_pi.sum()
+            print(f"-- Both Text Opt Loss: {text_loss.item()}")
+            text_loss.backward(retain_graph=True)
             if grad_clip:
                 torch.nn.utils.clip_grad_norm_([optimized_states], grad_clip)
             optimizer_text.step()
@@ -459,38 +477,27 @@ def optimized_generation(
             print(f"New Generated Text: {new_generated_text}")
 
             image_gen_prompt = f"{data['prompt']}. {new_generated_text}"
-            new_img = generate_image_from_prompt(model, vl_chat_processor, image_gen_prompt)
-            new_reward = reward_model.get_reward(new_img, data)
-            print(f"-- Both: Updated reward after text branch = {new_reward}")
-            reward_history.append(new_reward)
-            current_reward = new_reward
 
-        # 用优化后的文本更新 image_prompt_embed
-        # 重新 encode 优化后的文本prompt作为image分支输入
-        image_prompt_embed = vl_chat_processor(
-            image_gen_prompt, return_tensors="pt"
-        ).input_ids.to(device)  # 也可以用 vl_chat_processor 重新得到 prompt embedding
-
-        # ========== Step 2: 图像优化逻辑 ==========
-        total_img = len(image_hidden_states_list)
-        img_update_length = min(int(image_k * total_img), total_img)
-        if img_update_length <= 0:
-            print("Image Update Length Zero!!!")
-            return new_img, reward_history, total_img, image_token_num, img_update_length
-
-        optimized_states_img = torch.nn.Parameter(
-            torch.stack(
-                [
-                    s.clone().detach().to(device).requires_grad_(True)
-                    for s in image_hidden_states_list[start_index:start_index + img_update_length]
-                ]
+            # 用优化后的文本更新 image_prompt_embed
+            # 重新 encode 优化后的文本prompt作为image分支输入
+            img_gen_conversation = [{"role": "User", "content": image_gen_prompt}, {"role": "Assistant", "content": ""}]
+            sft_image_prompt = vl_chat_processor.apply_sft_template_for_multi_turn_prompts(
+                conversations=img_gen_conversation, sft_format=vl_chat_processor.sft_format, system_prompt=""
             )
-        )
-        optimizer_img = torch.optim.Adam([optimized_states_img], lr=lr)
+            print(f"Prompt: {sft_image_prompt}")
+            prompt_inputs = tokenizer(
+                text=[sft_image_prompt], return_tensors="pt", padding=True, padding_side="right", add_special_tokens=True
+            )
+            image_prompt_ids = prompt_inputs["input_ids"].to(device)
+            image_start_token_id = tokenizer.encode(vl_chat_processor.image_start_tag)[1]
+            image_prompt_ids = torch.cat([image_prompt_ids, image_prompt_ids.new_full((image_prompt_ids.size(0), 1), image_start_token_id)], dim=1).repeat(1, 1)
+            cond_inputs_embeds = model.language_model.get_input_embeddings()(image_prompt_ids)
+            pad_input_embeds = model.language_model.get_input_embeddings()(image_prompt_ids.new_full((1, 1), vl_chat_processor.pad_id))
+            uncond_inputs_embeds = cond_inputs_embeds.clone()
+            uncond_inputs_embeds[:,1:-1] = pad_input_embeds
+            image_prompt_embed = torch.repeat_interleave(cond_inputs_embeds, 2, dim=0)
+            image_prompt_embed[1::2] = uncond_inputs_embeds
 
-        for i in range(max_image_steps):
-            if current_reward > reward_threshold:
-                break
             optimizer_img.zero_grad()
 
             # 跟image branch逻辑一样
@@ -502,19 +509,23 @@ def optimized_generation(
             token_ids = torch.argmax(probs, dim=-1)
             log_pi = torch.log(probs[torch.arange(img_update_length), token_ids] + 1e-10)
 
-            loss = -current_reward * log_pi.sum()
-            print(f"-- Both Image Opt Loss: {loss.item():.4f}")
-            loss.backward()
+            image_loss = -current_reward * log_pi.sum()
+            print(f"-- Both Image Opt Loss: {image_loss.item()}")
+            image_loss.backward()
             optimizer_img.step()
 
             # 生成完整图像
             with torch.no_grad():
-                sampled_token_ids = torch.argmax(
-                    torch.softmax(model.gen_head(optimized_states_img), dim=-1), dim=-1
-                )
+                logits = model.gen_head(optimized_states_img)  # updated states
+                logit_cond = logits[:, 0, :]
+                logit_uncond = logits[:, 1, :]
+                fused_logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
+                probs = torch.softmax(fused_logits / temperature, dim=-1)
+
+                sampled_token_ids = torch.multinomial(probs, num_samples=1).squeeze(-1)  # [update_length]
                 # 拼接prompt embedding与优化后的image token再解码
                 optimized_token_embeds = model.prepare_gen_img_embeds(
-                    sampled_token_ids.repeat_interleave(2)
+                    sampled_token_ids.repeat_interleave(2).view(-1, 2).reshape(-1)
                 ).reshape(img_update_length, 2, -1).permute(1, 0, 2)
                 inputs_embeds_img = torch.cat([image_prompt_embed, optimized_token_embeds], dim=1)
 
@@ -523,26 +534,24 @@ def optimized_generation(
                 current_embeds = inputs_embeds_img
 
                 for j in range(img_update_length, image_token_num):
-                    outputs = model.language_model.model(
+                    img_outputs = model.language_model.model(
                         inputs_embeds=current_embeds,
                         use_cache=True,
-                        past_key_values=outputs.past_key_values if j > img_update_length else None
+                        past_key_values=img_outputs.past_key_values if j > img_update_length else None
                     )
-                    last_hidden = outputs.last_hidden_state[:, -1, :]
+                    last_hidden = img_outputs.last_hidden_state[:, -1, :]
                     logits = model.gen_head(last_hidden)
                     logit_cond = logits[0::2, :]
                     logit_uncond = logits[1::2, :]
                     fused_logits = logit_uncond + cfg_weight * (logit_cond - logit_uncond)
-                    next_token = torch.argmax(
-                        torch.softmax(fused_logits / temperature, dim=-1), dim=-1
-                    )
-                    generated_tokens[:, j] = next_token
+                    next_token = torch.multinomial(torch.softmax(fused_logits / temperature, dim=-1), num_samples=1)
+                    generated_tokens[:, j] = next_token.squeeze(dim=-1)
                     next_token = next_token.repeat(1, 2).view(-1)
                     next_embeds = model.prepare_gen_img_embeds(next_token).unsqueeze(1)
                     current_embeds = next_embeds
 
                 decoded = model.gen_vision_model.decode_code(
-                    generated_tokens,
+                    generated_tokens.to(dtype=torch.int),
                     shape=[1, 8, img_size // patch_size, img_size // patch_size],
                 )
                 decoded = decoded.detach().to(torch.float32).cpu().numpy().transpose(0, 2, 3, 1)
@@ -553,25 +562,47 @@ def optimized_generation(
             print(f"-- Both branch new image reward: {new_reward}")
             reward_history.append(new_reward)
             current_reward = new_reward
+            # ==================== Save trace ====================
+            if save_base_path is not None:
+                trace_dir = os.path.join(save_base_path, "both")
+                os.makedirs(trace_dir, exist_ok=True)
+                trace_file = os.path.join(trace_dir, "both_trace.jsonl")
+                # 当前生成的 image 文件路径
+                img_save_path = os.path.join(trace_dir, f"optimized_image_{i}.png")
+                new_img.save(img_save_path)
+                log_data = {
+                    "step": i,
+                    "reward": float(new_reward),
+                    "text_loss": float(text_loss.item()),     # 前面 text branch 中损失
+                    "image_loss": float(image_loss.item()),      # 当前 image branch 中损失
+                    "optimized_text": new_generated_text,
+                    "image_gen_prompt": image_gen_prompt,  # 记录完整 image prompt
+                    "image_path": img_save_path,
+                    "update_length": int(update_length),
+                    "img_update_length": int(img_update_length),
+                }
+                with open(trace_file, "a", encoding="utf-8") as f:
+                    json.dump(log_data, f, ensure_ascii=False)
+                    f.write("\n")
+                print(f"Trace saved: {trace_file}, image at: {img_save_path}")
 
-        return new_img, reward_history, total_img, image_token_num, img_update_length
+        return new_img, reward_history, total_img+total, image_token_num+len(generated_seq), img_update_length+update_length
 
-# model_path = "deepseek-ai/Janus-Pro-7B"
-# vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
+model_path = "deepseek-ai/Janus-Pro-7B"
+vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
 
-# vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
-#     model_path, trust_remote_code=True
-# )
-# vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
-# input_text = "a photo of a purple suitcase and an orange pizza"
-# data = {"tag": "color_attr", "include": [{"class": "suitcase", "count": 1, "color": "purple"}, {"class": "pizza", "count": 1, "color": "orange"}], "prompt": "a photo of a purple suitcase and an orange pizza"}
+vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
+    model_path, trust_remote_code=True
+)
+vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
+input_text = "a photo of a purple suitcase and an orange pizza"
+data = {"tag": "color_attr", "include": [{"class": "suitcase", "count": 1, "color": "purple"}, {"class": "pizza", "count": 1, "color": "orange"}], "prompt": "a photo of a purple suitcase and an orange pizza"}
 
-# reward_model = RewardModel(
-#     model_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/<OBJECT_DETECTOR_FOLDER>",
-#     object_names_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/object_names.txt",
-#     options={"clip_model": "ViT-L-14"}
-# )
+reward_model = RewardModel(
+    model_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/<OBJECT_DETECTOR_FOLDER>",
+    object_names_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/object_names.txt",
+    options={"clip_model": "ViT-L-14"}
+)
 
-# answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
-# torch.cuda.empty_cache()
-# new_img, reward_history, total, generated_seq, update_length = optimized_generation(reward_model, answer, data, vl_gpt, vl_chat_processor, torch.device("cuda"), text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens, optimize_mode="image")
+answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
+new_img, reward_history, ori_length, generated_seq, update_length = optimized_generation(reward_model, answer, data, vl_gpt, vl_chat_processor, torch.device("cuda"), text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens, optimize_mode="image")
