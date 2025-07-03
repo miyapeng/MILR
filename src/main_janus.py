@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from data import get_dataset
 from tqdm import tqdm
-from rewards.reward import RewardModel
+
 from ori_generation_janus import original_generation
 from opt_generation_janus import optimized_generation
 
@@ -20,7 +20,9 @@ def parse_args():
     parser.add_argument("--dataset", type=str, default="prompts/geneval/evaluation_metadata.jsonl", help="Dataset to evaluate")
     parser.add_argument("--model_name_or_path", type=str, help="Path to the model")
     parser.add_argument("--output_dir", type=str, help="Path to the output directory")
+    parser.add_argument("--data_name", type=str, default="geneval", choices=["geneval", "T2I-CompBench","Wise"], help="Type of dataset to evaluate")
     parser.add_argument("--optimize_mode", type=str, default="text", help="The mode of optimization, must be one of: 'text', 'image', 'both'")
+    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward"], help="Which reward model to use.")
     parser.add_argument("--start_data_idx", type=int, default=0, help="Start index of the data to evaluate")
     parser.add_argument("--end_data_idx", type=int, default=1319, help="End index of the data to evaluate")
 
@@ -60,38 +62,60 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-def save_image_and_metadata(image: Image.Image, example: dict, base_path: str, index: int):
-    folder_name = str(index).zfill(5)
-    sample_folder = os.path.join(base_path, folder_name, "samples")
-    os.makedirs(sample_folder, exist_ok=True)
+def save_image_and_metadata(image: Image.Image, example: dict, base_path: str, index: int, data_name: str):
+    if data_name == "geneval":
+        folder_name = str(index).zfill(5)
+        sample_folder = os.path.join(base_path, folder_name, "samples")
+        os.makedirs(sample_folder, exist_ok=True)
 
-    # 保存图片
-    img_path = os.path.join(sample_folder, "0000.png")
-    image.save(img_path)
+        # Save image
+        img_path = os.path.join(sample_folder, "0000.png")
+        image.save(img_path)
 
-    # 保存metadata.jsonl
-    metadata_path = os.path.join(base_path, folder_name, "metadata.jsonl")
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        f.write(json.dumps(example, ensure_ascii=False) + "\n")
+        # Write metadata.jsonl
+        metadata_path = os.path.join(base_path, folder_name, "metadata.jsonl")
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            f.write(json.dumps(example, ensure_ascii=False) + "\n")
 
-def judge_answer(output: str, reward_model, data):
-    '''
-    Judge whether the output is correct
+    elif data_name == "T2I-CompBench":
+        # Place all T2I-CompBench samples into base_path/samples
+        sample_folder = os.path.join(base_path, "samples")
+        os.makedirs(sample_folder, exist_ok=True)
 
-    Args:
-        output: model output
-        reward_model: reward model to judge the output
-        data: data to judge the output
+        # Create a safe filename prefix from the prompt
+        prompt = example.get("prompt", "")
+        safe_prompt = prompt.rstrip('.')
 
-    Returns:
-        bool: whether the output is correct
-    '''
-        
-    reward_score = reward_model.get_reward(output,data)
-    if reward_score == -1:
-        return False
-    elif reward_score == 0:
-        return True
+        # Use index as a 6-digit sequence number with leading zeros
+        filename = f"{safe_prompt}_{index:06}.png"
+        img_path = os.path.join(sample_folder, filename)
+        image.save(img_path)
+
+        # Append metadata.jsonl in base_path
+        metadata_log = os.path.join(base_path, "metadata.jsonl")
+        # Include the image filename in the record
+        record = {**example, "image": filename}
+        with open(metadata_log, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    elif data_name == "Wise":
+        # Store images in base_path/samples
+        sample_folder = os.path.join(base_path, "samples")
+        os.makedirs(sample_folder, exist_ok=True)
+
+        # Use index+1 for filenames: 1.png, 2.png, ...
+        filename = f"{index+1}.png"
+        img_path = os.path.join(sample_folder, filename)
+        image.save(img_path)
+
+        # Write metadata to wise_metadata.jsonl (append mode)
+        meta_path = os.path.join(base_path, "wise_metadata.jsonl")
+        record = {"filename": filename, **example}
+        with open(meta_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    else:
+        raise ValueError(f"Unsupported data_name: {data_name}")
 
 # evaluate function 
 def main(args):
@@ -124,11 +148,31 @@ def main(args):
     )
     vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
 
-    # load reward model
-    reward_model = RewardModel(
+    if args.reward_model_type == "geneval":
+        from rewards.reward import RewardModel
+        reward_model = RewardModel(
             model_path="rewards/<OBJECT_DETECTOR_FOLDER>",
             object_names_path="rewards/object_names.txt",
             options={"clip_model": "ViT-L-14"}
+        )
+    elif args.reward_model_type == "self_reward":
+        from rewards.self_reward import SelfRewardModel
+        reward_model = SelfRewardModel(vl_gpt=vl_gpt, vl_chat_processor=vl_chat_processor, device=device)
+    elif args.reward_model_type == "unified_reward":
+        from rewards.unified_reward import UnifiedReward
+        reward_model = UnifiedReward(
+            model_path='CodeGoat24/UnifiedReward-qwen-7b',
+            device=device
+        )
+    else:
+        from rewards.MixedReward.reward2 import MixedReward
+        reward_model = MixedReward(
+            git_ckpt_path="./rewards/MixedReward/reward_weights/git-large-vqav2",
+            unified_model_path="CodeGoat24/UnifiedReward-qwen-7b",
+            gdino_ckpt_path="./rewards/MixedReward/reward_weights/groundingdino_swint_ogc.pth",
+            gdino_config_path="./rewards/MixedReward/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
+            hps_ckpt_path   = "./rewards/MixedReward/reward_weights/HPS_v2_compressed.pt",
+            device=device
         )
 
     # load dataset
@@ -143,14 +187,14 @@ def main(args):
     optimized_length = 0
     fitten_length = 0
     model_name = args.model_name_or_path.split("/")[-1]
-    data_name = "geneval"
+    data_name = args.data_name
 
     if args.optimize_mode == "text":
-        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.optimize_mode}-text_k{args.text_k}-steps{args.max_text_steps}-lr{args.lr}"
+        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.reward_model_type}-{args.optimize_mode}-text_k{args.text_k}-steps{args.max_text_steps}-lr{args.lr}-reward_threshold{args.reward_threshold}"
     elif args.optimize_mode == "image":
-        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.optimize_mode}-image_k{args.image_k}-steps{args.max_image_steps}-lr{args.lr}"
+        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.reward_model_type}-{args.optimize_mode}-image_k{args.image_k}-steps{args.max_image_steps}-lr{args.lr}-reward_threshold{args.reward_threshold}"
     else:
-        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.optimize_mode}-text_k{args.text_k}-image_k{args.image_k}-steps{args.max_both_steps}-lr{args.lr}"
+        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.reward_model_type}-{args.optimize_mode}-text_k{args.text_k}-image_k{args.image_k}-steps{args.max_both_steps}-lr{args.lr}-reward_threshold{args.reward_threshold}"
 
     start_data_idx = max(0, args.start_data_idx)
     end_data_idx = min(args.end_data_idx, len(dataset))
@@ -192,7 +236,7 @@ def main(args):
                 device=device)
         # save original image and metadata
         if img is not None:
-            save_image_and_metadata(img, example, os.path.join(output_dir, "ori_img"), i)
+            save_image_and_metadata(img, example, os.path.join(output_dir, "ori_img"), i, data_name)
 
         torch.cuda.empty_cache()
         new_img, reward_history, ori_total_length, generated_seq, update_length = optimized_generation(
@@ -220,11 +264,11 @@ def main(args):
                 save_base_path = os.path.join(output_dir, "opt_history", str(i).zfill(4))
         )
         if new_img is not None:
-            save_image_and_metadata(new_img, example, os.path.join(output_dir, "opt_img"), i)
+            save_image_and_metadata(new_img, example, os.path.join(output_dir, "opt_img"), i,data_name)
         
         final_img = new_img if new_img is not None else img
         if final_img is not None:
-            save_image_and_metadata(final_img, example, os.path.join(output_dir, "final_img"), i)
+            save_image_and_metadata(final_img, example, os.path.join(output_dir, "final_img"), i, data_name)
             
         update_count += (len(reward_history) - 1)   
         
@@ -235,12 +279,12 @@ def main(args):
 
         # judge answer
         if img is not None:
-            original_correct_add = judge_answer(img, reward_model,data=example)
+            original_correct_add = reward_model.judge_answer(img,example)
         else:
             original_correct_add = False
-
+        
         if new_img is not None:
-            optimized_correct_add = judge_answer(new_img, reward_model, data=example)
+            optimized_correct_add = reward_model.judge_answer(new_img,example)
         else:
             optimized_correct_add = False
 

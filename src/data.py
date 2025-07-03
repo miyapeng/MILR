@@ -1,27 +1,54 @@
 import json
+import os
 
-def get_dataset(data_path):
+def get_dataset(data_path: str):
     """
-    仅加载 JSONL 文件，每行一个 dict，保持原始结构不变。
+    Load the dataset.
+
+    - JSONL: Parse each non-empty line into a dictionary and return as a list.
+      The file is expected to contain keys like "tag", "prompt", and optionally "include".
+    - TXT: Treat each non-empty line as a prompt.
+      The file's base name (without extension) is used as the "tag" for all entries.
+
+    Args:
+        data_path (str): Path to a .jsonl or .txt file.
+
+    Returns:
+        list[dict]: A list of dictionaries. Each dictionary contains at least "tag" and "prompt".
     """
-    if data_path.endswith('.jsonl'):
+    data_path = data_path.strip()
+
+    if data_path.endswith(".jsonl"):
         data = []
-        with open(data_path, 'r', encoding='utf-8') as f:
+        with open(data_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
-                # 直接用 Python json 解析，允许不同字段类型混用
-                data.append(json.loads(line))
+                try:
+                    data.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Error decoding JSONL line: {line}\n{e}")
         return data
 
-    # 如果需要支持其他格式，再在这里拓展
-    raise ValueError(f"Unsupported dataset format: {data_path}")
+    elif data_path.endswith(".txt"):
+        data = []
+        file_name = os.path.splitext(os.path.basename(data_path))[0]
+        with open(data_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                data.append({"tag": file_name, "prompt": line})
+        return data
+
+    else:
+        raise ValueError(f"Unsupported dataset format: {data_path}")
+
 
 if __name__ == '__main__':
-    from data import get_dataset
-
-    dataset = get_dataset("prompts/geneval/evaluation_metadata.jsonl")
+    #dataset = get_dataset("prompts/geneval/evaluation_metadata.jsonl")
+    dataset = get_dataset("/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/prompts/geneval/evaluation_metadata.jsonl")
     print(f"Example: {dataset[0]}")
 
 

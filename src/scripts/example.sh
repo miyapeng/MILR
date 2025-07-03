@@ -2,12 +2,13 @@
 
 PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-output_dir="./Results"
-optimize_mode="image"  # or "image"
+output_dir="./geneval_results/3_results"
+optimize_mode="text"  # or "image"
+reward_model_type="geneval"
 text_k=0.1 
-image_k=0.01 
-lr=0.01
-max_text_steps=5
+image_k=0.1 
+lr=0.1
+max_text_steps=15
 max_image_steps=15
 
 # === 设置日志文件名 ===
@@ -20,11 +21,12 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=3 python main_janus.py \
+CUDA_VISIBLE_DEVICES=2 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
     --optimize_mode "$optimize_mode" \
+    --reward_model_type "$reward_model_type" \
     --lr "$lr" \
     --text_k "$text_k" \
     --image_k "$image_k" \

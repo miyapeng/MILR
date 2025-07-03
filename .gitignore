@@ -182,3 +182,8 @@ geneval_results/
 <OBJECT_DETECTOR_FOLDER>
 
 Bagel/
+
+*.pth
+
+src/rewards/MixedReward/reward_weights
+src/rewards/T2ICompBench/UniDet_eval/experts/expert_weights

@@ -62,24 +62,48 @@ def load_pil_images(conversations: List[Dict[str, str]]) -> List[PIL.Image.Image
 
     """
 
-    pil_images = []
+    # pil_images = []
 
+    # for message in conversations:
+    #     if "images" not in message:
+    #         continue
+
+    #     for image_data in message["images"]:
+    #         if image_data.startswith("data:image"):
+    #             # Image data is in base64 format
+    #             _, image_data = image_data.split(",", 1)
+    #             image_bytes = base64.b64decode(image_data)
+    #             pil_img = PIL.Image.open(io.BytesIO(image_bytes))
+    #         else:
+    #             # Image data is a file path
+    #             pil_img = PIL.Image.open(image_data)
+    #         pil_img = pil_img.convert("RGB")
+    #         pil_images.append(pil_img)
+
+    # return pil_images
+    pil_images = []
     for message in conversations:
         if "images" not in message:
             continue
 
         for image_data in message["images"]:
-            if image_data.startswith("data:image"):
-                # Image data is in base64 format
+            if isinstance(image_data, PIL.Image.Image):
+                # 直接用已有 PIL 对象
+                pil_images.append(image_data.convert("RGB"))
+            elif isinstance(image_data, str) and image_data.startswith("data:image"):
+                # base64 图像
                 _, image_data = image_data.split(",", 1)
                 image_bytes = base64.b64decode(image_data)
-                pil_img = PIL.Image.open(io.BytesIO(image_bytes))
+                pil_img = PIL.Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                pil_images.append(pil_img)
+            elif isinstance(image_data, str):
+                # 文件路径
+                pil_img = PIL.Image.open(image_data).convert("RGB")
+                pil_images.append(pil_img)
             else:
-                # Image data is a file path
-                pil_img = PIL.Image.open(image_data)
-            pil_img = pil_img.convert("RGB")
-            pil_images.append(pil_img)
-
+                raise ValueError(
+                    f"Unsupported image format: {type(image_data)}, must be PIL.Image, base64 string, or file path."
+                )
     return pil_images
 
 

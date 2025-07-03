@@ -182,6 +182,13 @@ class RewardModel(object):
         is_correct, reason = self.evaluate(image, detected, metadata)
         return 0 if is_correct else -1, reason
 
+    def judge_answer(self, image, data):
+        reward_score = self.get_reward(image, data)
+        if reward_score == -1:
+            return False
+        elif reward_score == 0:
+            return True
+
     def get_reward(self, image, solution):
         """
         Args:
@@ -220,3 +227,4 @@ class RewardModel(object):
             # 清理临时图片
             if tmp_path and os.path.exists(tmp_path):
                 os.remove(tmp_path)
+

@@ -262,6 +262,7 @@ def optimized_generation(
             new_img = generate_image_from_prompt(model, vl_chat_processor, image_gen_prompt, save_path=save_path)
             new_reward = reward_model.get_reward(new_img, data)
             if save_base_path is not None:
+                os.makedirs(save_base_path, exist_ok=True)
                 trace_file = os.path.join(save_base_path, "text_trace.jsonl")
                 with open(trace_file, "a", encoding="utf-8") as f:
                     json.dump({
@@ -374,6 +375,7 @@ def optimized_generation(
             new_reward = reward_model.get_reward(new_img, data)
             print(f"-- Image Branch New Reward: {new_reward}")
             if save_base_path is not None:
+                os.makedirs(save_base_path, exist_ok=True)
                 trace_file = os.path.join(save_base_path, "image_trace.jsonl")
                 with open(trace_file, "a", encoding="utf-8") as f:
                     json.dump({
@@ -573,9 +575,11 @@ def optimized_generation(
             current_reward = new_reward
             # ==================== Save trace ====================
             if save_base_path is not None:
+                os.makedirs(save_base_path, exist_ok=True)
                 trace_file = os.path.join(save_base_path, "both_trace.jsonl")
                 # 当前生成的 image 文件路径
                 img_save_path = os.path.join(save_base_path, f"optimized_image_{i}.png")
+                #os.makedirs(save_dir, exist_ok=True)
                 new_img.save(img_save_path)
                 log_data = {
                     "step": i,
@@ -595,21 +599,21 @@ def optimized_generation(
 
         return new_img, reward_history, total_img+total, image_token_num+len(generated_seq), img_update_length+update_length
 
-model_path = "deepseek-ai/Janus-Pro-7B"
-vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
+# model_path = "deepseek-ai/Janus-Pro-7B"
+# vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
 
-vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
-    model_path, trust_remote_code=True
-)
-vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
-input_text = "a photo of a purple suitcase and an orange pizza"
-data = {"tag": "color_attr", "include": [{"class": "suitcase", "count": 1, "color": "purple"}, {"class": "pizza", "count": 1, "color": "orange"}], "prompt": "a photo of a purple suitcase and an orange pizza"}
+# vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
+#     model_path, trust_remote_code=True
+# )
+# vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
+# input_text = "a photo of a purple suitcase and an orange pizza"
+# data = {"tag": "color_attr", "include": [{"class": "suitcase", "count": 1, "color": "purple"}, {"class": "pizza", "count": 1, "color": "orange"}], "prompt": "a photo of a purple suitcase and an orange pizza"}
 
-reward_model = RewardModel(
-    model_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/<OBJECT_DETECTOR_FOLDER>",
-    object_names_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/object_names.txt",
-    options={"clip_model": "ViT-L-14"}
-)
+# reward_model = RewardModel(
+#     model_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/<OBJECT_DETECTOR_FOLDER>",
+#     object_names_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/rewards/object_names.txt",
+#     options={"clip_model": "ViT-L-14"}
+# )
 
-answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
-new_img, reward_history, ori_length, generated_seq, update_length = optimized_generation(reward_model, answer, data, vl_gpt, vl_chat_processor, torch.device("cuda"), text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens, optimize_mode="image")
+# answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
+# new_img, reward_history, ori_length, generated_seq, update_length = optimized_generation(reward_model, answer, data, vl_gpt, vl_chat_processor, torch.device("cuda"), text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_embed, generated_image_tokens, optimize_mode="both", save_base_path="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/test")
