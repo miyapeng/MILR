@@ -42,12 +42,12 @@ class ClipSimilarityEvaluator:
         similarity = (image_features @ text_features.T).squeeze().item()
         return round(similarity, 4)
 
-if __name__ == "__main__":
-    from PIL import Image
+# if __name__ == "__main__":
+#     from PIL import Image
 
-    evaluator = ClipSimilarityEvaluator(complex=False)
-    img = Image.open("/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a green bench and a blue bowl_000000.png").convert("RGB")
-    metadata = {"prompt": "a green bench and a blue bowl", "tag": "non-spatial"}
+#     evaluator = ClipSimilarityEvaluator(complex=False)
+#     img = Image.open("/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a green bench and a blue bowl_000000.png").convert("RGB")
+#     metadata = {"prompt": "a green bench and a blue bowl", "tag": "non-spatial"}
 
-    score = evaluator.eval(img, metadata)
-    print(f"CLIP 相似度得分: {score}")
+#     score = evaluator.eval(img, metadata)
+#     print(f"CLIP 相似度得分: {score}")

@@ -96,11 +96,25 @@ class SpatialRelationEvaluator:
         self.device = device
         self.complex = complex
 
-        self.model, self.transform = load_expert_model(task='obj_detection', ckpt="RS200")
+         # 记录当前 cwd
+        cwd_before = os.getcwd()
+
+        # 切到这个模块所在的文件夹，也就是 ....../T2ICompBench/UniDet_eval
+        eval_root = os.path.dirname(__file__)
+        os.chdir(eval_root)
+
+        try:
+            # 现在 load_expert_model 内部 merge_from_file("experts/obj_detection/configs/...") 
+            # 就会在 eval_root/experts/... 下找到正确的 .yaml
+            self.model, self.transform = load_expert_model(task='obj_detection', ckpt="RS200")
+            self.label_map = torch.load("dataset/detection_features.pt")["labels"]
+        finally:
+            # 恢复原来的 cwd
+            os.chdir(cwd_before)
+
         self.accelerator = Accelerator(mixed_precision="fp16")
         self.model = self.accelerator.prepare(self.model)
 
-        self.label_map = torch.load("dataset/detection_features.pt")["labels"]
         self.nlp       = spacy.load("en_core_web_sm")
 
     def eval(self, image: Image.Image, metadata: Dict[str, Any]) -> float:
@@ -245,11 +259,11 @@ class SpatialRelationEvaluator:
 
         return round(score, 4)
 
-if __name__ == "__main__":
-    # Example usage
-    evaluator = SpatialRelationEvaluator(device="cuda:0", complex=False)
-    # Load image
-    img = Image.open("/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a blue bench and a green cake_000002.png").convert("RGB")
-    metadata = {"prompt": "a blue bench and a green cake", "tag": "spatial"}
-    score = evaluator.eval(img, metadata)
-    print(f"Spatial Relation Score: {score}")
+# if __name__ == "__main__":
+#     # Example usage
+#     evaluator = SpatialRelationEvaluator(device="cuda:0", complex=False)
+#     # Load image
+#     img = Image.open("/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a blue bench and a green cake_000002.png").convert("RGB")
+#     metadata = {"prompt": "a blue bench and a green cake", "tag": "spatial"}
+#     score = evaluator.eval(img, metadata)
+#     print(f"Spatial Relation Score: {score}")

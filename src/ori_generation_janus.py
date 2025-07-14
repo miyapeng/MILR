@@ -12,19 +12,19 @@ import copy
 from transformers import AutoModelForCausalLM
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 
-# def seed_all(seed):
-#     """Set all random seeds to ensure reproducibility."""
-#     random.seed(seed)
-#     np.random.seed(seed)
-#     torch.manual_seed(seed)
-#     if torch.cuda.is_available():
-#         torch.cuda.manual_seed(seed)
-#         torch.cuda.manual_seed_all(seed)
-#     # The two lines below are known to cause slowdowns, but ensure reproducibility
-#     torch.backends.cudnn.deterministic = True
-#     torch.backends.cudnn.benchmark = False
+def seed_all(seed):
+    """Set all random seeds to ensure reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    # The two lines below are known to cause slowdowns, but ensure reproducibility
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
-# seed_all(42)
+seed_all(42)
 
 def original_generation(
     input_text: str,
@@ -215,13 +215,13 @@ def original_generation(
     return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, inputs_embeds_img.cpu(), image_gen_prompt
 
 
-# model_path = "deepseek-ai/Janus-Pro-7B"
-# vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
+model_path = "deepseek-ai/Janus-Pro-7B"
+vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
 
-# vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
-#     model_path, trust_remote_code=True
-# )
-# vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
-# input_text = "a photo of two toothbrushes."
-# answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
-# print(f"Generated image size: {answer.size}")
+vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
+    model_path, trust_remote_code=True
+)
+vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
+input_text = "a photo of two toothbrushes."
+answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
+print(f"Generated image size: {answer.size}")

@@ -20,7 +20,7 @@ class BlipVQAEvaluator:
             "image": image_path,
             "question_id": 0,
             "question": prompt + "?" if prompt else "",
-            "dataset": tag,
+            "dataset": "color",
         }]
         annotation_dir = os.path.join(out_dir, f"annotation{np_index + 1}_blip")
         vqa_dir = os.path.join(annotation_dir, "VQA")
@@ -71,7 +71,13 @@ class BlipVQAEvaluator:
                 with open(os.path.join(ann_dir, "vqa_test.json"), "r") as f:
                     print(json.load(f))
 
-                VQA_main(ann_dir + "/", vqa_dir + "/")
+                blip_root = os.path.dirname(__file__)            # .../BLIPvqa_eval
+                cwd_before = os.getcwd()
+                os.chdir(blip_root)                              # 切到 .../BLIPvqa_eval
+                try:
+                    VQA_main(ann_dir + "/", vqa_dir + "/")
+                finally:
+                    os.chdir(cwd_before)                         # 恢复原来的 cwd
 
                 with open(os.path.join(vqa_dir, "result", "vqa_result.json"), "r") as file:
                     r = json.load(file)
@@ -92,18 +98,18 @@ class BlipVQAEvaluator:
         return float(f"{reward_final.item():.4f}")
 
 
-if __name__ == "__main__":
-    # Instantiate the evaluator
-    evaluator = BlipVQAEvaluator(np_num=8, device="cuda:0")
+# if __name__ == "__main__":
+#     # Instantiate the evaluator
+#     evaluator = BlipVQAEvaluator(np_num=8, device="cuda:0")
 
-    # Example 1: pass image path
-    image_path = "/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a horse on the right of a car_000003.png"
-    metadata = {'tag': 'color', 'prompt': 'a horse on the right of a car'}
+#     # Example 1: pass image path
+#     image_path = "/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a horse on the right of a car_000003.png"
+#     metadata = {'tag': 'color', 'prompt': 'a horse on the right of a car'}
     
-    # score = evaluator.eval(image_path, metadata)
-    # print("Final BLIP-VQA Score (from path):", score)
+#     # score = evaluator.eval(image_path, metadata)
+#     # print("Final BLIP-VQA Score (from path):", score)
 
-    # Example 2: pass PIL.Image.Image
-    img = Image.open(image_path)
-    score = evaluator.eval(img, metadata)
-    print("Final BLIP-VQA Score (from PIL):", score)
+#     # Example 2: pass PIL.Image.Image
+#     img = Image.open(image_path)
+#     score = evaluator.eval(img, metadata)
+#     print("Final BLIP-VQA Score (from PIL):", score)

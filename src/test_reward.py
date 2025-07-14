@@ -48,32 +48,32 @@
 # print(f"Reward: {reward}")
 # test_unified_reward.py
 
-## Test UnifiedReward
-import json
-from PIL import Image
-from rewards.unified_reward import UnifiedReward  # 假设你把类保存到 unified_reward.py
+# ## Test UnifiedReward
+# import json
+# from PIL import Image
+# from rewards.unified_reward import UnifiedReward  # 假设你把类保存到 unified_reward.py
 
-if __name__ == "__main__":
-    # 1. 实例化模型（替换成你自己的路径）
-    model = UnifiedReward(
-        model_path="CodeGoat24/UnifiedReward-qwen-7b",
-        device="cuda:0"
-    )
+# if __name__ == "__main__":
+#     # 1. 实例化模型（替换成你自己的路径）
+#     model = UnifiedReward(
+#         model_path="CodeGoat24/UnifiedReward-qwen-7b",
+#         device="cuda:0"
+#     )
 
-    # 2. 读取测试图片
-    img = Image.open("/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/test/optimized_image_9.png")
+#     # 2. 读取测试图片
+#     img = Image.open("/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/test/optimized_image_9.png")
 
-    # 3. 构造 solution JSON（与 get_reward 接口一致）
-    solution = '{"tag": "color_attr", "include": [{"class": "suitcase", "count": 1, "color": "purple"}, {"class": "pizza", "count": 1, "color": "orange"}], "prompt": "a photo of a purple suitcase and an orange pizza"}'
+#     # 3. 构造 solution JSON（与 get_reward 接口一致）
+#     solution = '{"tag": "color_attr", "include": [{"class": "suitcase", "count": 1, "color": "purple"}, {"class": "pizza", "count": 1, "color": "orange"}], "prompt": "a photo of a purple suitcase and an orange pizza"}'
 
-    # 4. 调用 get_reward
-    reward = model.get_reward(img, solution)
-    print(f"Raw Reward (mapped): {reward}")  
-    # 这里 reward == 0 表示模型给了满分；< 0 表示越低分，越不匹配
+#     # 4. 调用 get_reward
+#     reward = model.get_reward(img, solution)
+#     print(f"Raw Reward (mapped): {reward}")  
+#     # 这里 reward == 0 表示模型给了满分；< 0 表示越低分，越不匹配
 
-    # 5. 调用 judge_answer
-    is_correct = model.judge_answer(img, solution)
-    print(f"Is Correct? {is_correct}")
+#     # 5. 调用 judge_answer
+#     is_correct = model.judge_answer(img, solution)
+#     print(f"Is Correct? {is_correct}")
 
 # import json
 # from PIL import Image
@@ -93,3 +93,23 @@ if __name__ == "__main__":
 
 #     reward = reward_model.get_reward(img, solution)
 #     print(f"Raw Reward (mapped): {reward}")  
+
+import json
+from PIL import Image
+from rewards.T2ICompBench.reward import CompBenchRewardModel
+if __name__ == "__main__":
+    # Instantiate the evaluator
+    evaluator = CompBenchRewardModel(task_type="spatial", device="cuda:0")
+
+    # Example 1: pass image path
+    image_path = "/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a horse on the right of a car_000003.png"
+    metadata = {'tag': 'spatial', 'prompt': 'a horse on the right of a car'}
+
+    # image_path = "/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a green bench and a blue bowl_000000.png"
+    # metadata = {'tag': 'non-spatial', 'prompt': 'a green bench and a blue bowl'}
+
+
+    # Example 2: pass PIL.Image.Image
+    img = Image.open(image_path)
+    score = evaluator.get_reward(img, metadata)
+    print("Final BLIP-VQA Score (from PIL):", score)

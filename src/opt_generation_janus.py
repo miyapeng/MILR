@@ -1,7 +1,6 @@
 # Janus-Pro optimized generation: latent optimization for prompt (text) and/or image hidden states
 # Provides three distinct branches: "text", "image", and "both".
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
 
 import torch
 import numpy as np
@@ -11,7 +10,6 @@ import json
 from ori_generation_janus import original_generation
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 from transformers import AutoModelForCausalLM
-from rewards.reward import RewardModel
 
 @torch.inference_mode()
 def generate_image_from_prompt(

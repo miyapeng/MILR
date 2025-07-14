@@ -1,7 +1,7 @@
 import os
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
-from data import get_dataset
+from process import get_dataset,save_image_and_metadata,set_seed
 from tqdm import tqdm
 
 from ori_generation_janus import original_generation
@@ -22,9 +22,10 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, help="Path to the output directory")
     parser.add_argument("--data_name", type=str, default="geneval", choices=["geneval", "T2I-CompBench","Wise"], help="Type of dataset to evaluate")
     parser.add_argument("--optimize_mode", type=str, default="text", help="The mode of optimization, must be one of: 'text', 'image', 'both'")
-    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward"], help="Which reward model to use.")
+    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward","T2I-CompBench"], help="Which reward model to use.")
     parser.add_argument("--start_data_idx", type=int, default=0, help="Start index of the data to evaluate")
     parser.add_argument("--end_data_idx", type=int, default=1319, help="End index of the data to evaluate")
+    parser.add_argument("--task_type", type=str, default="color", help="Type of task for T2I-CompBench")
 
     # seed
     parser.add_argument("--seed", type=int, default=42, help="Random seed for initialization")
@@ -47,90 +48,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def set_seed(seed):
-    '''
-    Set random seed for reproducibility
-
-    Args:
-        seed: random seed
-    '''
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-
-def save_image_and_metadata(image: Image.Image, example: dict, base_path: str, index: int, data_name: str):
-    if data_name == "geneval":
-        folder_name = str(index).zfill(5)
-        sample_folder = os.path.join(base_path, folder_name, "samples")
-        os.makedirs(sample_folder, exist_ok=True)
-
-        # Save image
-        img_path = os.path.join(sample_folder, "0000.png")
-        image.save(img_path)
-
-        # Write metadata.jsonl
-        metadata_path = os.path.join(base_path, folder_name, "metadata.jsonl")
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            f.write(json.dumps(example, ensure_ascii=False) + "\n")
-
-    elif data_name == "T2I-CompBench":
-        # Place all T2I-CompBench samples into base_path/samples
-        sample_folder = os.path.join(base_path, "samples")
-        os.makedirs(sample_folder, exist_ok=True)
-
-        # Create a safe filename prefix from the prompt
-        prompt = example.get("prompt", "")
-        safe_prompt = prompt.rstrip('.')
-
-        # Use index as a 6-digit sequence number with leading zeros
-        filename = f"{safe_prompt}_{index:06}.png"
-        img_path = os.path.join(sample_folder, filename)
-        image.save(img_path)
-
-        # Append metadata.jsonl in base_path
-        metadata_log = os.path.join(base_path, "metadata.jsonl")
-        # Include the image filename in the record
-        record = {**example, "image": filename}
-        with open(metadata_log, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-    elif data_name == "Wise":
-        # Store images in base_path/samples
-        sample_folder = os.path.join(base_path, "samples")
-        os.makedirs(sample_folder, exist_ok=True)
-
-        # Use index+1 for filenames: 1.png, 2.png, ...
-        filename = f"{index+1}.png"
-        img_path = os.path.join(sample_folder, filename)
-        image.save(img_path)
-
-        # Write metadata to wise_metadata.jsonl (append mode)
-        meta_path = os.path.join(base_path, "wise_metadata.jsonl")
-        record = {"filename": filename, **example}
-        with open(meta_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-    else:
-        raise ValueError(f"Unsupported data_name: {data_name}")
-
 # evaluate function 
 def main(args):
-    '''
-    Evaluate model
-
-    Args:
-        dataset: dataset to evaluate
-        sample_num: number of samples to evaluate
-
-    Returns:
-        original_accuracy: original generation accuracy
-        optimized_accuracy: optimized generation accuracy
-    '''
-    
     if args.seed:
         set_seed(args.seed)
     
@@ -156,8 +75,11 @@ def main(args):
             options={"clip_model": "ViT-L-14"}
         )
     elif args.reward_model_type == "self_reward":
-        from rewards.self_reward import SelfRewardModel
+        from rewards.self_reward_janus import SelfRewardModel
         reward_model = SelfRewardModel(vl_gpt=vl_gpt, vl_chat_processor=vl_chat_processor, device=device)
+    elif args.reward_model_type == "T2I-CompBench":
+        from rewards.T2ICompBench.reward import CompBenchRewardModel
+        reward_model = CompBenchRewardModel(task_type=args.task_type, device=device)
     elif args.reward_model_type == "unified_reward":
         from rewards.unified_reward import UnifiedReward
         reward_model = UnifiedReward(
@@ -165,18 +87,17 @@ def main(args):
             device=device
         )
     else:
-        from rewards.MixedReward.reward2 import MixedReward
+        from rewards.MixedReward.reward1 import MixedReward
         reward_model = MixedReward(
             git_ckpt_path="./rewards/MixedReward/reward_weights/git-large-vqav2",
             unified_model_path="CodeGoat24/UnifiedReward-qwen-7b",
             gdino_ckpt_path="./rewards/MixedReward/reward_weights/groundingdino_swint_ogc.pth",
             gdino_config_path="./rewards/MixedReward/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
-            hps_ckpt_path   = "./rewards/MixedReward/reward_weights/HPS_v2_compressed.pt",
             device=device
         )
 
     # load dataset
-    dataset = get_dataset(args.dataset)
+    dataset = get_dataset(args.dataset,args.task_type)
     print(f"Example: {dataset[0]}")
 
     original_correct = 0
@@ -251,9 +172,9 @@ def main(args):
                 image_hidden_states_list=image_hidden_states_list,
                 image_prompt_embed=image_prompt_embed,
                 ori_image_prompt=ori_image_prompt,
-                start_index=start_data_idx,
                 max_text_steps=args.max_text_steps,
                 max_image_steps=args.max_image_steps,
+                max_both_steps=args.max_both_steps,
                 lr=args.lr,
                 grad_clip=args.grad_clip,
                 text_k=args.text_k,

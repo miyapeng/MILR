@@ -75,7 +75,10 @@ def load_expert_model(task=None, ckpt=None):
         parser.add_argument("--confidence-threshold", type=float, default=0.5)
         parser.add_argument("--outpath",type=str)
         parser.add_argument("--complex", type=bool)
-        args = parser.parse_args()
+        
+        #args = parser.parse_args()
+        args, _ = parser.parse_known_args()
+
         if ckpt == "RS200":
             args.config_file = 'experts/obj_detection/configs/Unified_learned_OCIM_RS200_6x+2x.yaml'
             args.opts = ['MODEL.WEIGHTS', 'experts/expert_weights/Unified_learned_OCIM_RS200_6x+2x.pth']

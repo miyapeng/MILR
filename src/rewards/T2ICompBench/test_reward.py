@@ -79,17 +79,14 @@ import json
 from PIL import Image
 from reward import CompBenchRewardModel
 if __name__ == "__main__":
-    # 1. 实例化模型（替换成你自己的路径）
-    reward_model = CompBenchRewardModel(
-        task_type='blip_vqa',
-        device='cuda:0'
-    )
+    # Instantiate the evaluator
+    evaluator = CompBenchRewardModel(task_type="shape", device="cuda:0")
 
-    # 2. 读取测试图片
-    img = Image.open("/media/raid/workspace/miyapeng/T2I-CompBench/Janus_test/results/color/samples/a_green_bench_and_a_blue_bowl_000000.png")
+    # Example 1: pass image path
+    image_path = "/media/raid/workspace/miyapeng/T2I-CompBench/examples/samples/a blue bench and a green cake_000002.png"
+    metadata = {'tag': 'color', 'prompt': 'a blue bench and a green cake'}
 
-    # 3. 构造 solution JSON（与 get_reward 接口一致）
-    solution = {'tag': 'color_val', 'prompt': 'a green bench and a blue bowl'}
-
-    reward = reward_model.get_reward(img, solution)
-    print(f"Raw Reward (mapped): {reward}")  
+    # Example 2: pass PIL.Image.Image
+    img = Image.open(image_path)
+    score = evaluator.get_reward(img, metadata)
+    print("Final BLIP-VQA Score (from PIL):", score)
