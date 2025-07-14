@@ -16,33 +16,72 @@ cd src/rewards
 ```
 
 ## Usage
+We support different kinds of reward types.
+
+### Geneval
 
 ```bash
 cd src
-cd scripts
-vim example.sh # modify this according to your need
-cd ..
-sh scripts/example.sh
+bash scripts/example.sh
 ```
 
 The example.sh file
 
 ```bash
-PATH_TO_DATA= # path to the dataset (the path str should contain either "AIME_2024", "gsm8k", "MATH-500")
-PATH_TO_MODEL= # path to the model 
-rho= # the value of rho, which is the hyperparameter for the fractional update
-lr= # the learning rate
-solver_prompt_idx= # the index of the solver prompt to use (0 for "boxex", 1 for "json")
+#!/bin/bash
+## the prompt dataset
+PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl" 
+## the model name or path
+PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
+## the output dir
+output_dir="./geneval_results/step_scaling_results"
+## the optimize mode, you can choose from "both","text","image", both contain text and image optimization
+optimize_mode="both"  # or "image","text"
+# the reward model type, you can choose from "geneval", "self_reward"
+# "unified_reward", "mixed_reward"
+reward_model_type="geneval"
+# the ratio of text token
+text_k=0.1
+# the ratio of image token 
+image_k=0.01 
+## the learning rate
+lr=0.01
+## the text steps if you choose text mode
+max_text_steps=30
+## the image step if you choose image mode
+max_image_steps=30
+## the both step if you choose both mode
+max_both_steps=30
 
-python main.py \
-    --dataset $PATH_TO_DATA \
-    --model_name_or_path $PATH_TO_MODEL \
-    --output_dir ./output \
-    --k $rho \
-    --lr $lr \
-    --solver_prompt_idx $solver_prompt_idx \
+# === 设置日志文件名 ===
+if [ "$optimize_mode" = "text" ]; then
+    LOG_FILE="$output_dir/${optimize_mode}_tk${text_k}_lr${lr}_ts${max_text_steps}.txt"
+elif [ "$optimize_mode" = "image" ]; then
+    LOG_FILE="$output_dir/${optimize_mode}_ik${image_k}_lr${lr}_is${max_image_steps}.txt"
+else
+    LOG_FILE="$output_dir/${optimize_mode}_tk${text_k}_ik${image_k}_lr${lr}_bs${max_both_steps}.txt"
+fi
+
+# === 启动训练脚本 ===
+CUDA_VISIBLE_DEVICES=0 python main_janus.py \
+    --dataset "$PATH_TO_DATA" \
+    --model_name_or_path "$PATH_TO_MODEL" \
+    --output_dir "$output_dir" \
+    --optimize_mode "$optimize_mode" \
+    --reward_model_type "$reward_model_type" \
+    --lr "$lr" \
+    --text_k "$text_k" \
+    --image_k "$image_k" \
+    --max_text_steps "$max_text_steps" \
+    --max_image_steps "$max_image_steps" \
+    --max_both_steps "$max_both_steps" \
     --device "cuda" \
+    > "$LOG_FILE" 2>&1 &
+
 ```
+
+### T2I-CompBench
+Coming soon....
 
 ## Files for Modification
 
