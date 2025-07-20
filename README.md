@@ -8,49 +8,44 @@ pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https
 pip install -r requirements.txt
 
 #install Geneval configs
-#You may meet package counters, it doesn't matter`
+#You may meet package counters, it doesn't matter
 pip install -U openmim
 mim install mmengine mmcv-full==1.7.2
-cd src/rewards
+cd src/geneval
+./evaluation/download_models.sh "<OBJECT_DETECTOR_FOLDER>/"
+git clone https://github.com/open-mmlab/mmdetection.git
+cd mmdetection; git checkout 2.x
+pip install -v -e .
+
+cd ../rewards
 ./evaluation/download_models.sh "<OBJECT_DETECTOR_FOLDER>/"
 ```
+If you meet error with flash_attn==2.7.2.post1, you can refer to the `https://github.com/Dao-AILab/flash-attention/releases` to download.
 
 ## Usage
-We support different kinds of reward types.
+We support different kinds of reward types. And we test on three benchmarks: **Geneval**, **T2I-CompBench**, **Wise**
 
 ### Geneval
 
 ```bash
 cd src
-bash scripts/example.sh
+bash scripts/geneval_both.sh
 ```
 
-The example.sh file
+The bash file
 
 ```bash
 #!/bin/bash
-## the prompt dataset
-PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl" 
-## the model name or path
+PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-## the output dir
-output_dir="./geneval_results/step_scaling_results"
-## the optimize mode, you can choose from "both","text","image", both contain text and image optimization
-optimize_mode="both"  # or "image","text"
-# the reward model type, you can choose from "geneval", "self_reward"
-# "unified_reward", "mixed_reward"
+output_dir="./geneval_results/long_results" #self create the dir
+optimize_mode="both"  # or "image"
 reward_model_type="geneval"
-# the ratio of text token
-text_k=0.1
-# the ratio of image token 
+text_k=0.1 
 image_k=0.01 
-## the learning rate
 lr=0.01
-## the text steps if you choose text mode
 max_text_steps=30
-## the image step if you choose image mode
 max_image_steps=30
-## the both step if you choose both mode
 max_both_steps=30
 
 # === 设置日志文件名 ===
@@ -63,7 +58,7 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=0 python main_janus.py \
+CUDA_VISIBLE_DEVICES=1 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
@@ -77,8 +72,15 @@ CUDA_VISIBLE_DEVICES=0 python main_janus.py \
     --max_both_steps "$max_both_steps" \
     --device "cuda" \
     > "$LOG_FILE" 2>&1 &
-
 ```
+- `optimize_mode`: The mode of optimization, you can choose from `both`, `image` or `text`.
+- `reward_model_type`: the reward model used for optimize, you can check in the main_janus.py file
+- `text_k`: the ratio of text tokens for optimization
+- `image_k`: the ratio of image tokens for optimization
+- `lr`: the learning rate
+- `max_text_steps`: the steps of text optimization
+- `max_image_steps`: the steps of image optimization
+- `max_both_steps`: the steps of both optimization
 
 ### T2I-CompBench
 Coming soon....
