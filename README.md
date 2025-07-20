@@ -48,7 +48,7 @@ max_text_steps=30
 max_image_steps=30
 max_both_steps=30
 
-# === 设置日志文件名 ===
+# === set log file name ===
 if [ "$optimize_mode" = "text" ]; then
     LOG_FILE="$output_dir/${optimize_mode}_tk${text_k}_lr${lr}_ts${max_text_steps}.txt"
 elif [ "$optimize_mode" = "image" ]; then
@@ -57,7 +57,7 @@ else
     LOG_FILE="$output_dir/${optimize_mode}_tk${text_k}_ik${image_k}_lr${lr}_bs${max_both_steps}.txt"
 fi
 
-# === 启动训练脚本 ===
+# === train script ===
 CUDA_VISIBLE_DEVICES=1 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
