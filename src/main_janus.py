@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, help="Path to the output directory")
     parser.add_argument("--data_name", type=str, default="geneval", choices=["geneval", "T2I-CompBench","Wise"], help="Type of dataset to evaluate")
     parser.add_argument("--optimize_mode", type=str, default="text", help="The mode of optimization, must be one of: 'text', 'image', 'both'")
-    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward","T2I-CompBench"], help="Which reward model to use.")
+    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward","T2I-CompBench","wise_reward"], help="Which reward model to use.")
     parser.add_argument("--start_data_idx", type=int, default=0, help="Start index of the data to evaluate")
     parser.add_argument("--end_data_idx", type=int, default=1319, help="End index of the data to evaluate")
     parser.add_argument("--task_type", type=str, default="color", help="Type of task for T2I-CompBench")
@@ -86,8 +86,8 @@ def main(args):
             model_path='CodeGoat24/UnifiedReward-qwen-7b',
             device=device
         )
-    else:
-        from rewards.MixedReward.reward1 import MixedReward
+    elif args.reward_model_type == "mixed_reward":
+        from rewards.MixedReward.reward3 import MixedReward
         reward_model = MixedReward(
             git_ckpt_path="./rewards/MixedReward/reward_weights/git-large-vqav2",
             unified_model_path="CodeGoat24/UnifiedReward-qwen-7b",
@@ -95,9 +95,15 @@ def main(args):
             gdino_config_path="./rewards/MixedReward/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
             device=device
         )
+    elif args.reward_model_type == "wise_reward":
+        from rewards.wise_reward import WiseReward
+        reward_model = WiseReward(
+            #api_key='64cd78bc94b8b7d6f02ee4263c3ed709', 
+            model='gpt-4o-2024-05-13',
+        )
 
     # load dataset
-    dataset = get_dataset(args.dataset,args.task_type)
+    dataset = get_dataset(args.dataset,args.task_type,args.data_name)
     print(f"Example: {dataset[0]}")
 
     original_correct = 0
@@ -154,11 +160,12 @@ def main(args):
                 input_text=prompt,
                 model=vl_gpt,
                 vl_chat_processor=vl_chat_processor,
+                optimize_mode = args.optimize_mode,
                 device=device)
         # save original image and metadata
         if img is not None:
             save_image_and_metadata(img, example, os.path.join(output_dir, "ori_img"), i, data_name)
-
+        # print(f"ori_image_prompt:{ori_image_prompt}")
         torch.cuda.empty_cache()
         new_img, reward_history, ori_total_length, generated_seq, update_length = optimized_generation(
                 reward_model=reward_model,
@@ -182,7 +189,7 @@ def main(args):
                 reward_threshold=args.reward_threshold,
                 max_text_tokens=args.max_new_tokens,
                 optimize_mode = args.optimize_mode,
-                save_base_path = os.path.join(output_dir, "opt_history", str(i).zfill(4))
+                save_base_path = os.path.join(output_dir, "opt_history", str(i).zfill(4)),
         )
         if new_img is not None:
             save_image_and_metadata(new_img, example, os.path.join(output_dir, "opt_img"), i,data_name)

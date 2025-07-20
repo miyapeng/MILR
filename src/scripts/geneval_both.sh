@@ -2,14 +2,14 @@
 
 PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-output_dir="./geneval_results/3_results"
-optimize_mode="image"  # or "image"
+output_dir="./geneval_results/long_results" #self create the dir
+optimize_mode="both"  # or "image"
 reward_model_type="geneval"
 text_k=0.1 
-image_k=1.0 
+image_k=0.01 
 lr=0.01
 max_text_steps=30
-max_image_steps=15
+max_image_steps=30
 max_both_steps=30
 
 # === 设置日志文件名 ===

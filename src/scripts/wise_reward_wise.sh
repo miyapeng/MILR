@@ -1,17 +1,18 @@
 #!/bin/bash
 
-PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
+PATH_TO_DATA="prompts/Wise/cultural_common_sense.json"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-output_dir="./geneval_results/unified_reward_results"
-optimize_mode="both"  # or "image"
-reward_model_type="unified_reward"
-reward_threshold=-1
-text_k=0.2 
+output_dir="./Wise_results/cultural_common_sense"
+optimize_mode="image"  # or "image"
+reward_model_type="wise_reward"
+data_name="Wise"
+reward_threshold=-0.5
+text_k=0.1 
 image_k=0.01 
-lr=0.02
-max_text_steps=100
-max_image_steps=100
-max_both_steps=100
+lr=0.01
+max_text_steps=30
+max_image_steps=30
+max_both_steps=30
 
 # === 设置日志文件名 ===
 if [ "$optimize_mode" = "text" ]; then
@@ -23,10 +24,11 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=2 python main_janus.py \
+CUDA_VISIBLE_DEVICES=6 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
+    --data_name "$data_name" \
     --optimize_mode "$optimize_mode" \
     --reward_model_type "$reward_model_type" \
     --lr "$lr" \

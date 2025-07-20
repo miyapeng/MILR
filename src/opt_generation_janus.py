@@ -7,6 +7,7 @@ import numpy as np
 import PIL.Image
 import json
 
+from process import save_image_and_metadata
 from ori_generation_janus import original_generation
 from janus.models import MultiModalityCausalLM, VLChatProcessor
 from transformers import AutoModelForCausalLM
@@ -118,7 +119,7 @@ def optimized_generation(
     cfg_weight = 5.0,
     temperature = 1.0,
     optimize_mode="text",  # must be one of: "text", "image", "both"
-    save_base_path: str = None,  # <-- 加这个
+    save_base_path: str = None,
 ):
     """
     Optimize latent states for Janus-Pro image generation with three explicit branches:
@@ -253,11 +254,12 @@ def optimized_generation(
             # 生成图像 → 评估 reward
             
             if save_base_path is not None:
-                save_dir = os.path.join(save_base_path, "text")
+                save_dir = os.path.join(save_base_path)
                 os.makedirs(save_dir, exist_ok=True)
                 save_path = os.path.join(save_dir, f"optimized_image_{i}.png")
 
             new_img = generate_image_from_prompt(model, vl_chat_processor, image_gen_prompt, save_path=save_path)
+
             new_reward = reward_model.get_reward(new_img, data)
             if save_base_path is not None:
                 os.makedirs(save_base_path, exist_ok=True)

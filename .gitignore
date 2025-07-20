@@ -177,9 +177,13 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-src/geneval
+#src/geneval
 src/geneval_results
 <OBJECT_DETECTOR_FOLDER>
+
+src/geneval/<OBJECT_DETECTOR_FOLDER>
+src/geneval/mmdetection
+src/geneval/geneval_results
 
 *.pth
 
@@ -187,3 +191,5 @@ src/rewards/MixedReward/reward_weights
 src/rewards/T2ICompBench/UniDet_eval/experts/expert_weights
 src/T2ICompBench_results
 src/Bagel/models
+
+src/Wise_results

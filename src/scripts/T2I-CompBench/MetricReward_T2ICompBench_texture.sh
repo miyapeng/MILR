@@ -13,7 +13,7 @@ image_k=0.01
 lr=0.01
 max_text_steps=10
 max_image_steps=10
-max_both_steps=30
+max_both_steps=50
 
 # === 设置日志文件名 ===
 if [ "$optimize_mode" = "text" ]; then
@@ -25,7 +25,7 @@ else
 fi
 
 # === 启动训练脚本 ===
-TOKENIZERS_PARALLELISM=false CUDA_VISIBLE_DEVICES=0 python main_janus.py \
+TOKENIZERS_PARALLELISM=false CUDA_VISIBLE_DEVICES=6 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \

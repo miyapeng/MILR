@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import random
 
-def get_dataset(data_path: str,task_type: str):
+def get_dataset(data_path: str,task_type: str, data_name: str):
     """
     Load the dataset.
 
@@ -22,7 +22,7 @@ def get_dataset(data_path: str,task_type: str):
     """
     data_path = data_path.strip()
 
-    if data_path.endswith(".jsonl"):
+    if data_name == "geneval":
         data = []
         with open(data_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -35,7 +35,7 @@ def get_dataset(data_path: str,task_type: str):
                     raise ValueError(f"Error decoding JSONL line: {line}\n{e}")
         return data
 
-    elif data_path.endswith(".txt"):
+    elif data_name == "T2I-CompBench":
         data = []
         file_name = os.path.splitext(os.path.basename(data_path))[0]
         with open(data_path, "r", encoding="utf-8") as f:
@@ -44,6 +44,39 @@ def get_dataset(data_path: str,task_type: str):
                 if not line:
                     continue
                 data.append({"tag": task_type, "prompt": line})
+        return data
+    elif data_name == "Wise":
+        data = []
+        
+        with open(data_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+        
+        if content.startswith("["):
+            try:
+                items = json.loads(content)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Error decoding JSON array in {data_path}:\n{e}")
+        else:
+            
+            items = []
+            for line in content.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    items.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Error decoding JSONL line: {line}\n{e}")
+
+        
+        for item in items:
+            data.append({
+                "tag": item.get("Category", ""),
+                "subcategory": item.get("Subcategory", ""),
+                "explanation": item.get("Explanation", ""),
+                "prompt": item.get("Prompt", ""),
+                "prompt_id": item.get("prompt_id")
+            })
         return data
 
     else:
@@ -92,7 +125,8 @@ def save_image_and_metadata(image: Image.Image, example: dict, base_path: str, i
         os.makedirs(sample_folder, exist_ok=True)
 
         # Use index+1 for filenames: 1.png, 2.png, ...
-        filename = f"{index+1}.png"
+        index = example.get("prompt_id", "")
+        filename = f"{index}.png"
         img_path = os.path.join(sample_folder, filename)
         image.save(img_path)
 

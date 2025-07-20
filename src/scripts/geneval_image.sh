@@ -2,16 +2,12 @@
 
 PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-output_dir="./geneval_results/unified_reward_results"
-optimize_mode="both"  # or "image"
-reward_model_type="unified_reward"
-reward_threshold=-1
-text_k=0.2 
-image_k=0.01 
-lr=0.02
-max_text_steps=100
-max_image_steps=100
-max_both_steps=100
+output_dir="./geneval_results/3_results"
+optimize_mode="image"  # or "image"
+reward_model_type="geneval" 
+image_k=0.03 
+lr=0.01
+max_image_steps=15
 
 # === 设置日志文件名 ===
 if [ "$optimize_mode" = "text" ]; then
@@ -23,18 +19,14 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=2 python main_janus.py \
+CUDA_VISIBLE_DEVICES=1 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
     --optimize_mode "$optimize_mode" \
     --reward_model_type "$reward_model_type" \
     --lr "$lr" \
-    --text_k "$text_k" \
     --image_k "$image_k" \
-    --max_text_steps "$max_text_steps" \
     --max_image_steps "$max_image_steps" \
-    --max_both_steps "$max_both_steps" \
     --device "cuda" \
-    --reward_threshold "$reward_threshold" \
     > "$LOG_FILE" 2>&1 &

@@ -30,6 +30,7 @@ def original_generation(
     input_text: str,
     model: MultiModalityCausalLM, # Should be of type MultiModalityCausalLM
     vl_chat_processor: VLChatProcessor,       # Should be of type VLChatProcessor
+    optimize_mode: str,
     device: torch.device,
     parallel_size: int = 1,
     temperature: float = 1.0,
@@ -134,8 +135,11 @@ def original_generation(
     # ========================================================================
     # Part 2: Image Generation & Hidden State Extraction
     # ========================================================================
-    
-    image_gen_prompt = f"{input_text}. {enhanced_text}"
+    if optimize_mode == "image":
+        image_gen_prompt = f"{input_text}"
+    else:
+        image_gen_prompt = f"{input_text}. {enhanced_text}"
+
     img_gen_conversation = [{"role": "User", "content": image_gen_prompt}, {"role": "Assistant", "content": ""}]
     sft_image_prompt = vl_chat_processor.apply_sft_template_for_multi_turn_prompts(
         conversations=img_gen_conversation, sft_format=vl_chat_processor.sft_format, system_prompt=""
@@ -143,7 +147,7 @@ def original_generation(
     print(f"Prompt: {sft_image_prompt}\nSemantic-CoT: {enhanced_text}")
 
     prompt_inputs = tokenizer(
-    text=[sft_image_prompt], return_tensors="pt", padding=True, padding_side="right", add_special_tokens=True
+        text=[sft_image_prompt], return_tensors="pt", padding=True, padding_side="right", add_special_tokens=True
     )
     image_prompt_ids = prompt_inputs["input_ids"].to(device)
     attention_mask = prompt_inputs["attention_mask"].to(device)
@@ -215,13 +219,13 @@ def original_generation(
     return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, inputs_embeds_img.cpu(), image_gen_prompt
 
 
-model_path = "deepseek-ai/Janus-Pro-7B"
-vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
+# model_path = "deepseek-ai/Janus-Pro-7B"
+# vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
 
-vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
-    model_path, trust_remote_code=True
-)
-vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
-input_text = "a photo of two toothbrushes."
-answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
-print(f"Generated image size: {answer.size}")
+# vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
+#     model_path, trust_remote_code=True
+# )
+# vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
+# input_text = "a photo of two toothbrushes."
+# answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
+# print(f"Generated image size: {answer.size}")
