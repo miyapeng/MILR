@@ -7,9 +7,9 @@ optimize_mode="image"  # or "image"
 reward_model_type="wise_reward"
 data_name="Wise"
 reward_threshold=-0.5
-text_k=0.1 
-image_k=0.01 
-lr=0.01
+text_k=0.2 
+image_k=0.02 
+lr=0.03
 max_text_steps=30
 max_image_steps=30
 max_both_steps=30
@@ -24,7 +24,7 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=6 python main_janus.py \
+CUDA_VISIBLE_DEVICES=7 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
@@ -39,4 +39,5 @@ CUDA_VISIBLE_DEVICES=6 python main_janus.py \
     --max_both_steps "$max_both_steps" \
     --device "cuda" \
     --reward_threshold "$reward_threshold" \
+    --resume \
     > "$LOG_FILE" 2>&1 &

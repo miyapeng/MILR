@@ -27,6 +27,7 @@ class WiseReward:
         """
         # REGION = "eastus"
         REGION = "eastus2"
+        # REGION = "northcentralus"
         MODEL = model
         API_KEY = api_key
         API_BASE = "http://123.127.249.51/proxy"

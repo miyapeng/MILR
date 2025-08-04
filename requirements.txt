@@ -16,3 +16,4 @@ icecream
 supervision>=0.22.0
 groundingdino-py
 openai
+xgrammar

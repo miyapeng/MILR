@@ -5,9 +5,9 @@ PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
 output_dir="./geneval_results/3_results"
 optimize_mode="image"  # or "image"
 reward_model_type="geneval" 
-image_k=0.03 
-lr=0.01
-max_image_steps=15
+image_k=0.02 
+lr=0.03
+max_image_steps=30
 
 # === 设置日志文件名 ===
 if [ "$optimize_mode" = "text" ]; then
@@ -19,7 +19,7 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=1 python main_janus.py \
+CUDA_VISIBLE_DEVICES=0 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \

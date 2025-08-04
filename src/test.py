@@ -13,9 +13,9 @@
 # formatted_cot_prompt = cot_prompt.format(input_text)
 # print(formatted_cot_prompt)
 
-from process import get_dataset
-dataset = get_dataset("prompts/Wise/cultural_common_sense.json",task_type="text", data_name="Wise")
-print(f"Example: {dataset[1]}")
+# from process import get_dataset
+# dataset = get_dataset("prompts/Wise/cultural_common_sense.json",task_type="text", data_name="Wise")
+# print(f"Example: {dataset[1]}")
 
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
@@ -164,3 +164,40 @@ print(f"Example: {dataset[1]}")
 # state_dict = torch.load("/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/results/Janus-Pro-7B-geneval-text-text_k0.1-image_k0.01-lr0.01/logistics.pt", map_location="cpu")
 # for key, value in state_dict.items():
 #     print(f"{key}: {value}")
+
+import torch
+from transformers import AutoModel
+from PIL import Image
+
+# 模型路径
+model_path = "Efficient-Large-Model/NVILA-Lite-2B-Verifier"
+
+device = torch.device("cuda:0")
+
+# 加载模型
+model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
+
+# 获取 yes/no 的 token ID（用于查看分数）
+yes_id = model.tokenizer.encode("yes", add_special_tokens=False)[0]
+no_id = model.tokenizer.encode("no", add_special_tokens=False)[0]
+
+# 输入图像路径和 prompt
+image_path = "/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/long_results/Janus-Pro-7B-geneval-geneval-both-text_k0.2-image_k0.02-steps30-lr0.03-reward_threshold-0.1/final_img/00000/samples/0000.png"
+prompt_text = "a photo of a bench."
+
+# 构造 prompt
+prompt = f"""You are an AI assistant specializing in image analysis and ranking. Your task is to analyze and compare image based on how well they match the given prompt. The given prompt is:{prompt_text}. Please consider the prompt and the image to make a decision and response directly with 'yes' or 'no'."""
+
+# 打开图片
+image = Image.open(image_path)
+
+# 模型推理
+response, scores = model.generate_content([image, prompt])
+
+# 输出判断结果与 logits
+yes_score = scores[0][0, yes_id].item()
+no_score = scores[0][0, no_id].item()
+confidence = yes_score - no_score
+
+print(f"Model response: {response}")
+print(f"Yes score: {yes_score:.4f}, No score: {no_score:.4f}, Confidence: {confidence:.4f}")

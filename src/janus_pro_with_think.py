@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "6" 
 import argparse
 import json
 import random
@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument("metadata_file", type=str, help="Path to JSONL metadata file.")
     parser.add_argument("--model", type=str, default="deepseek-ai/Janus-Pro-7B", help="Janus model name or path.")
     parser.add_argument("--outdir", type=str, default="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/janus_pro_think", help="Directory to write results to.")
-    parser.add_argument("--parallel_size", type=int, default=4, help="Number of parallel images to generate.")
+    parser.add_argument("--parallel_size", type=int, default=1, help="Number of parallel images to generate.")
     parser.add_argument("--max_text_tokens", type=int, default=512, help="Max tokens for text enhancement.")
     parser.add_argument("--image_token_num", type=int, default=576, help="Number of image tokens per image.")
     parser.add_argument("--img_size", type=int, default=384, help="Generated image resolution.")

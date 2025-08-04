@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, help="Path to the output directory")
     parser.add_argument("--data_name", type=str, default="geneval", choices=["geneval", "T2I-CompBench","Wise"], help="Type of dataset to evaluate")
     parser.add_argument("--optimize_mode", type=str, default="text", help="The mode of optimization, must be one of: 'text', 'image', 'both'")
-    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward","T2I-CompBench","wise_reward"], help="Which reward model to use.")
+    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward","T2I-CompBench","wise_reward","gpt4o","NVILA"], help="Which reward model to use.")
     parser.add_argument("--start_data_idx", type=int, default=0, help="Start index of the data to evaluate")
     parser.add_argument("--end_data_idx", type=int, default=1319, help="End index of the data to evaluate")
     parser.add_argument("--task_type", type=str, default="color", help="Type of task for T2I-CompBench")
@@ -98,8 +98,20 @@ def main(args):
     elif args.reward_model_type == "wise_reward":
         from rewards.wise_reward import WiseReward
         reward_model = WiseReward(
-            #api_key='64cd78bc94b8b7d6f02ee4263c3ed709', 
+            api_key='64cd78bc94b8b7d6f02ee4263c3ed709', 
             model='gpt-4o-2024-05-13',
+        )
+    elif args.reward_model_type == "gpt4o":
+        from rewards.gpt4o_reward import GPT4oReward
+        reward_model = GPT4oReward(
+            api_key='64cd78bc94b8b7d6f02ee4263c3ed709', 
+            model='gpt-4o-2024-11-20',
+        )
+    elif args.reward_model_type == "NVILA":
+        from rewards.NVILA_reward import NVILAReward
+        reward_model = NVILAReward(
+           model_path="Efficient-Large-Model/NVILA-Lite-2B-Verifier",
+           device="cuda:0",
         )
 
     # load dataset

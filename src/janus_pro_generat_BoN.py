@@ -1,20 +1,22 @@
 import argparse
 import json
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "7" 
 import torch
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
 from pytorch_lightning import seed_everything
 from janus.models import MultiModalityCausalLM, VLChatProcessor
+from rewards.reward import RewardModel
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("metadata_file", type=str, help="Path to JSONL metadata file.")
     parser.add_argument("--model", type=str, default="deepseek-ai/Janus-Pro-7B", help="Janus model name or path.")
-    parser.add_argument("--outdir", type=str, default="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/janus-pro", help="Directory to write results to.")
+    parser.add_argument("--outdir", type=str, default="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/janus-pro-BoN-10", help="Directory to write results to.")
     parser.add_argument("--img_size", type=int, default=384, help="Generated image size.")
-    parser.add_argument("--parallel_size", type=int, default=30, help="Number of parallel samples.")
+    parser.add_argument("--parallel_size", type=int, default=10, help="Number of parallel samples.")
     parser.add_argument("--image_token_num_per_image", type=int, default=576, help="Token length per image.")
     parser.add_argument("--cfg_weight", type=float, default=5.0, help="Classifier-free guidance scale.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
@@ -70,6 +72,12 @@ def main(opt):
     model = MultiModalityCausalLM.from_pretrained(opt.model, trust_remote_code=True)
     model = model.to(torch.bfloat16).cuda().eval()
 
+    reward_model = RewardModel(
+        model_path="rewards/<OBJECT_DETECTOR_FOLDER>",
+        object_names_path="rewards/object_names.txt",
+        options={"clip_model": "ViT-L-14"}
+    )
+
     with open(opt.metadata_file) as fp:
         metadatas = [json.loads(line) for line in fp]
 
@@ -87,7 +95,9 @@ def main(opt):
 
         outpath = os.path.join(opt.outdir, f"{index:05d}")
         sample_path = os.path.join(outpath, "samples")
+        all_samples_path = os.path.join(outpath, "all_samples")
         os.makedirs(sample_path, exist_ok=True)
+        os.makedirs(all_samples_path, exist_ok=True)
 
         print(f"[{index}/{len(metadatas)}] Generating for prompt: {prompt}")
         images = generate_image(
@@ -98,12 +108,27 @@ def main(opt):
             img_size=opt.img_size,
         )
 
+        best_img = None
         for i, img in enumerate(images):
-            Image.fromarray(img).save(os.path.join(sample_path, f"{i:04}.png"))
+            image_pil = Image.fromarray(img)
+            # 保存所有样本
+            image_pil.save(os.path.join(all_samples_path, f"{i:04}.png"))
+
+            # 评估 reward
+            reward = reward_model.get_reward(image_pil, metadata)
+            if reward == 0 and best_img is None:
+                best_img = image_pil
+
+        # 保存 best-of-N
+        if best_img is not None:
+            best_img.save(os.path.join(sample_path, "0000.png"))
+        else:
+            # 若无 reward=0 的图，保存第0张兜底
+            Image.fromarray(images[0]).save(os.path.join(sample_path, "0000.png"))
+
+        # 保存 metadata
         with open(os.path.join(outpath, "metadata.jsonl"), "w") as f:
             json.dump(metadata, f)
-
-
 
 if __name__ == "__main__":
     args = parse_args()
