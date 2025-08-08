@@ -1,9 +1,9 @@
 #!/bin/bash
 
 PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
-PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-output_dir="./geneval_results/long_results" #self create the dir
-optimize_mode="text"  # or "image"
+PATH_TO_MODEL="deepseek-ai/Janus-Pro-1B"
+output_dir="./geneval_results/Janus-Pro-1B" #self create the dir
+optimize_mode="both"  # or "image"
 reward_model_type="geneval"
 text_k=0.2 
 image_k=0.02 
