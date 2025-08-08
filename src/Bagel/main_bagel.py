@@ -1,0 +1,309 @@
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+from ..process import get_dataset,save_image_and_metadata,set_seed
+from tqdm import tqdm
+from ori_generation_bagel import original_generation
+from opt_generation_bagel import optimized_generation
+import os
+import argparse
+import numpy as np
+import random
+from PIL import Image
+from accelerate import infer_auto_device_map, load_checkpoint_and_dispatch, init_empty_weights
+
+from data.transforms import ImageTransform
+from data.data_utils import pil_img2rgb, add_special_tokens
+from modeling.bagel import (
+    BagelConfig, Bagel, Qwen2Config, Qwen2ForCausalLM, SiglipVisionConfig, SiglipVisionModel
+)
+from modeling.qwen2 import Qwen2Tokenizer
+from modeling.bagel.qwen2_navit import NaiveCache
+from modeling.autoencoder import load_ae
+from safetensors.torch import load_file
+from inferencer import InterleaveInferencer
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Evaluate the model")
+    parser.add_argument("--dataset", type=str, default="prompts/geneval/evaluation_metadata.jsonl", help="Dataset to evaluate")
+    parser.add_argument("--model_name_or_path", type=str, help="Path to the model")
+    parser.add_argument("--output_dir", type=str, help="Path to the output directory")
+    parser.add_argument("--data_name", type=str, default="geneval", choices=["geneval", "T2I-CompBench","Wise"], help="Type of dataset to evaluate")
+    parser.add_argument("--optimize_mode", type=str, default="text", help="The mode of optimization, must be one of: 'text', 'image', 'both'")
+    parser.add_argument("--reward_model_type", type=str, default="geneval", choices=["geneval", "self_reward", "unified_reward","mixed_reward"], help="Which reward model to use.")
+    parser.add_argument("--start_data_idx", type=int, default=0, help="Start index of the data to evaluate")
+    parser.add_argument("--end_data_idx", type=int, default=1319, help="End index of the data to evaluate")
+
+    # seed
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for initialization")
+
+    # optimization args
+    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
+    parser.add_argument("--grad_clip", type=float, default=None, help="Gradient clipping threshold")
+    parser.add_argument("--text_k", type=float, default=0.1, help="Ratio of update length to the total length of hidden states")
+    parser.add_argument("--image_k", type=float, default=0.01, help="Ratio of update length to the total length of hidden states")
+    parser.add_argument("--max_text_steps", type=int, default=10, help="Number of text optimization iterations")
+    parser.add_argument("--max_image_steps", type=int, default=10, help="Number of image optimization iterations")
+    parser.add_argument("--max_both_steps", type=int, default=10, help="Number of both(text and image) optimization iterations")
+    parser.add_argument("--max_new_tokens", type=int, default=512, help="Number of generated tokens")
+    parser.add_argument("--device", type=str, default=None)
+
+    # reward model
+    parser.add_argument("--reward_threshold", type=float, default=-0.1, help="Threshold for reward to stop optimization")
+
+    parser.add_argument("--resume", action="store_true", help="Resume training from the last checkpoint")
+    return parser.parse_args()
+
+
+# evaluate function 
+def main(args):
+    if args.seed:
+        set_seed(args.seed)
+    
+    # set device
+    if args.device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        device = args.device
+
+    # load model and tokenizer
+    # LLM config preparing
+    llm_config = Qwen2Config.from_json_file(os.path.join(args.model_name_or_path, "llm_config.json"))
+    llm_config.qk_norm = True
+    llm_config.tie_word_embeddings = False
+    llm_config.layer_module = "Qwen2MoTDecoderLayer"
+
+    # ViT config preparing
+    vit_config = SiglipVisionConfig.from_json_file(os.path.join(args.model_name_or_path, "vit_config.json"))
+    vit_config.rope = False
+    vit_config.num_hidden_layers = vit_config.num_hidden_layers - 1
+
+    # VAE loading
+    vae_model, vae_config = load_ae(local_path=os.path.join(args.model_name_or_path, "ae.safetensors"))
+
+    # Bagel config preparing
+    config = BagelConfig(
+        visual_gen=True,
+        visual_und=True,
+        llm_config=llm_config, 
+        vit_config=vit_config,
+        vae_config=vae_config,
+        vit_max_num_patch_per_side=70,
+        connector_act='gelu_pytorch_tanh',
+        latent_patch_size=2,
+        max_latent_size=64,
+    )
+
+    with init_empty_weights():
+        language_model = Qwen2ForCausalLM(llm_config)
+        vit_model      = SiglipVisionModel(vit_config)
+        model          = Bagel(language_model, vit_model, config)
+        model.vit_model.vision_model.embeddings.convert_conv2d_to_linear(vit_config, meta=True)
+
+    # Tokenizer Preparing
+    tokenizer = Qwen2Tokenizer.from_pretrained(args.model_name_or_path)
+    tokenizer, new_token_ids, _ = add_special_tokens(tokenizer)
+
+    # Image Transform Preparing
+    vae_transform = ImageTransform(1024, 512, 16)
+    vit_transform = ImageTransform(980, 224, 14)
+
+    # 强制单卡加载
+    device_map = {"": "cuda:0"}
+    print(device_map)
+
+    model = load_checkpoint_and_dispatch(
+        model,
+        checkpoint=os.path.join(args.model_name_or_path, "ema.safetensors"),
+        device_map=device_map,            # ✅ 现在是 dict 类型
+        offload_buffers=True,
+        dtype=torch.bfloat16,
+        force_hooks=True,
+        offload_folder="/tmp/offload"
+    )
+
+    model = model.eval()
+    print('Model loaded')
+
+    inferencer = InterleaveInferencer(
+        model=model, 
+        vae_model=vae_model, 
+        tokenizer=tokenizer, 
+        vae_transform=vae_transform, 
+        vit_transform=vit_transform, 
+        new_token_ids=new_token_ids
+    )
+    
+    inference_hyper_text=dict(
+        max_think_token_n=1000,
+        do_sample=False,
+        cfg_text_scale=4.0,
+        cfg_img_scale=1.0,
+        cfg_interval=[0.4, 1.0],
+        timestep_shift=3.0,
+        num_timesteps=50,
+        cfg_renorm_min=0,
+        cfg_renorm_type="global",
+    )
+
+    if args.reward_model_type == "geneval":
+        from ..rewards.reward import RewardModel
+        reward_model = RewardModel(
+            model_path="../rewards/<OBJECT_DETECTOR_FOLDER>",
+            object_names_path="../rewards/object_names.txt",
+            options={"clip_model": "ViT-L-14"}
+        )
+    elif args.reward_model_type == "self_reward":
+        from ..rewards.self_reward_bagel import SelfRewardModel
+        reward_model = SelfRewardModel(inferencer, device=device)
+    elif args.reward_model_type == "unified_reward":
+        from ..rewards.unified_reward import UnifiedReward
+        reward_model = UnifiedReward(
+            model_path='CodeGoat24/UnifiedReward-qwen-7b',
+            device=device
+        )
+    else:
+        from ..rewards.MixedReward.reward2 import MixedReward
+        reward_model = MixedReward(
+            git_ckpt_path="./rewards/MixedReward/reward_weights/git-large-vqav2",
+            unified_model_path="CodeGoat24/UnifiedReward-qwen-7b",
+            gdino_ckpt_path="./rewards/MixedReward/reward_weights/groundingdino_swint_ogc.pth",
+            gdino_config_path="./rewards/MixedReward/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
+            hps_ckpt_path   = "./rewards/MixedReward/reward_weights/HPS_v2_compressed.pt",
+            device=device
+        )
+
+    # load dataset
+    dataset = get_dataset(args.dataset)
+    print(f"Example: {dataset[0]}")
+
+    original_correct = 0
+    optimized_correct = 0
+    total = 0
+    update_count = 0
+    original_length = 0
+    optimized_length = 0
+    fitten_length = 0
+    model_name = args.model_name_or_path.split("/")[-1]
+    data_name = args.data_name
+
+    if args.optimize_mode == "text":
+        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.reward_model_type}-{args.optimize_mode}-text_k{args.text_k}-steps{args.max_text_steps}-lr{args.lr}-reward_threshold{args.reward_threshold}"
+    elif args.optimize_mode == "image":
+        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.reward_model_type}-{args.optimize_mode}-image_k{args.image_k}-steps{args.max_image_steps}-lr{args.lr}-reward_threshold{args.reward_threshold}"
+    else:
+        output_dir = f"{args.output_dir}/{model_name}-{data_name}-{args.reward_model_type}-{args.optimize_mode}-text_k{args.text_k}-image_k{args.image_k}-steps{args.max_both_steps}-lr{args.lr}-reward_threshold{args.reward_threshold}"
+
+    start_data_idx = max(0, args.start_data_idx)
+    end_data_idx = min(args.end_data_idx, len(dataset))
+  
+    if args.resume:
+        print(f"Resume from {output_dir}")
+        # load logistics
+        logistics = torch.load(f"{output_dir}/logistics.pt")
+        start_data_idx = logistics["start_idx"]
+        original_correct = logistics["original_correct"]
+        optimized_correct = logistics["optimized_correct"]
+        total = logistics["total"]
+        update_count = logistics["update_count"]
+        original_length = logistics["original_length"]
+        optimized_length = logistics["optimized_length"]
+        fitten_length = logistics["fitten_length"]
+
+    
+    print(f"Start to evaluate {data_name} from {start_data_idx} to {end_data_idx}...")
+
+    data_idx_list = range(start_data_idx, end_data_idx)
+    for i in tqdm(data_idx_list):
+        example = dataset[i]
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        prompt = example["prompt"]
+        task_tag = example["tag"]
+
+        print(f"Task_tag: {task_tag}")
+        print(f"prompt: {prompt}")
+        if prompt is None:
+            continue
+
+        ori_output = inferencer(text=prompt, think=True, **inference_hyper_text)
+        # save original image and metadata
+        img = ori_output['image']
+        text_hidden_states = ori_output['text_hidden_states']
+        if img is not None:
+            save_image_and_metadata(img, example, os.path.join(output_dir, "ori_img"), i, data_name)
+
+        torch.cuda.empty_cache()
+        new_img, reward_history, ori_total_length, generated_seq, update_length = optimized_generation(
+                reward_model=reward_model,
+                image=img,
+                data=example,
+                device=device,
+                text_hidden_states_list=text_hidden_states,
+                max_text_steps=args.max_text_steps,
+                max_image_steps=args.max_image_steps,
+                lr=args.lr,
+                grad_clip=args.grad_clip,
+                text_k=args.text_k,
+                image_k=args.image_k,
+                reward_threshold=args.reward_threshold,
+                max_text_tokens=args.max_new_tokens,
+                optimize_mode = args.optimize_mode,
+                save_base_path = os.path.join(output_dir, "opt_history", str(i).zfill(4))
+        )
+        if new_img is not None:
+            save_image_and_metadata(new_img, example, os.path.join(output_dir, "opt_img"), i,data_name)
+        
+        final_img = new_img if new_img is not None else img
+        if final_img is not None:
+            save_image_and_metadata(final_img, example, os.path.join(output_dir, "final_img"), i, data_name)
+            
+        update_count += (len(reward_history) - 1)   
+        
+        # extract answer from model response
+        original_length += ori_total_length
+        optimized_length += generated_seq
+        fitten_length += (generated_seq - update_length) if len(reward_history) > 1 else 0
+
+        # judge answer
+        if img is not None:
+            original_correct_add = reward_model.judge_answer(img,example)
+        else:
+            original_correct_add = False
+        
+        if new_img is not None:
+            optimized_correct_add = reward_model.judge_answer(new_img,example)
+        else:
+            optimized_correct_add = False
+
+        original_correct += original_correct_add
+        optimized_correct += optimized_correct_add
+
+        total += 1
+        
+        # save logistics
+        # save original correct, optimized correct, total, update count
+        torch.save({
+            "original_correct": original_correct,
+            "optimized_correct": optimized_correct,
+            "total": total,
+            "start_idx": i+1,
+            "update_count": update_count,
+            "original_length": original_length,
+            "optimized_length": optimized_length,
+            "fitten_length": fitten_length
+        }, f"{output_dir}/logistics.pt")
+
+    print(f"Original accuracy: {original_correct / total:.4f}")
+    print(f"Optimized accuracy: {optimized_correct / total:.4f}")
+    print(f"Average update length: {update_count / total:.4f}")
+    print(f"Average original length: {original_length / total:.4f}")
+    print(f"Average optimized length: {optimized_length / total:.4f}")
+    print(f"Average fitten length: {fitten_length / total:.4f}")       
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    for arg in vars(args):
+        print(f"-- {arg}: {getattr(args, arg)}")
+    main(args)
