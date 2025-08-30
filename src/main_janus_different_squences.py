@@ -5,7 +5,7 @@ from process import get_dataset,save_image_and_metadata,set_seed
 from tqdm import tqdm
 
 from ori_generation_janus import original_generation
-from opt_generation_janus import optimized_generation
+from opt_generation_janus_text_image import optimized_generation
 
 import argparse
 import numpy as np

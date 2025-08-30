@@ -26,11 +26,12 @@ class WiseReward:
             api_base: Optional base URL for custom OpenAI deployments.
         """
         # REGION = "eastus"
-        REGION = "eastus2"
-        # REGION = "northcentralus"
+        # REGION = "eastus2"
+        REGION = "northcentralus"
         MODEL = model
         API_KEY = api_key
-        API_BASE = "http://123.127.249.51/proxy"
+        # API_BASE = "http://123.127.249.51/proxy"
+        API_BASE = "https://api.tonggpt.mybigai.ac.cn/proxy"
         ENDPOINT = f"{API_BASE}/{REGION}"
 
         self.client = AzureOpenAI(

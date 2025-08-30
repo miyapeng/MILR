@@ -1,20 +1,21 @@
 #!/bin/bash
 
 # ==================== Config ====================
-BASE_ROOT="/media/raid/workspace/miyapeng/Multimodal-LatentSeek/src/geneval_results/Janus-Pro-1B"
+BASE_ROOT="/fs-computility/ai-shen/fanyuyu/latentseek/Multimodal-LatentSeek/src/geneval_results/Janus-Pro-1B"
 STEPS=30
 OBJECT_DETECTOR_FOLDER="<OBJECT_DETECTOR_FOLDER>"  # Fill in actual detector path
-GPU_ID=0
+GPU_ID=1
 text_k=0.2
 image_k=0.02
 lr=0.03
 reward_threshold=-0.1
 benchmark="geneval" 
 reward_model_type="geneval"
-type="both"
+type="image"
 
 # Step list
 steps=("02" "04" "06" "08" "10" "12" "14" "16" "18" "20" "22" "24" "26" "28" "30")
+# steps=("10" "20" "30")
 
 # ==================== Preprocess: Split final_img by steps ====================
 # BASE_DIR="${BASE_ROOT}/Janus-Pro-7B-${benchmark}-${reward_model_type}-${type}-text_k${text_k}-image_k${image_k}-steps${STEPS}-lr${lr}-reward_threshold${reward_threshold}"

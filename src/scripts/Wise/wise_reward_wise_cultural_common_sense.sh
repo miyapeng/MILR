@@ -3,7 +3,7 @@
 PATH_TO_DATA="prompts/Wise/cultural_common_sense.json"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
 output_dir="./Wise_results/seed41/cultural_common_sense"
-optimize_mode="both"  # or "image"
+optimize_mode="text"  # or "image"
 reward_model_type="wise_reward"
 data_name="Wise"
 reward_threshold=-0.50
@@ -41,4 +41,4 @@ CUDA_VISIBLE_DEVICES=1 python main_janus.py \
     --device "cuda" \
     --reward_threshold "$reward_threshold" \
     --seed "$seed" \
-    > "$LOG_FILE" 2>&1 &
+    # > "$LOG_FILE" 2>&1 &

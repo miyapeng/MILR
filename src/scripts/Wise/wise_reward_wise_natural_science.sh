@@ -3,7 +3,7 @@
 PATH_TO_DATA="prompts/Wise/natural_science.json"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
 output_dir="./Wise_results/seed41/natural_science"
-optimize_mode="both"  # or "image"
+optimize_mode="text"  # or "image"
 reward_model_type="wise_reward"
 data_name="Wise"
 reward_threshold=-0.50
@@ -25,7 +25,7 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=3 python main_janus.py \
+CUDA_VISIBLE_DEVICES=2 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \

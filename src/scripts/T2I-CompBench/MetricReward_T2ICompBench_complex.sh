@@ -4,16 +4,16 @@ PATH_TO_DATA="prompts/T2I-CompBench/complex_val.txt"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
 output_dir="./T2ICompBench_results/seed41/complex"
 data_name="T2I-CompBench"
-optimize_mode="both"  # or "image"
+optimize_mode="image"  # or "image"
 reward_model_type="T2I-CompBench"
 task_type="complex"
 reward_threshold=-0.6
 text_k=0.2 
 image_k=0.02 
 lr=0.03
-max_text_steps=30
-max_image_steps=30
-max_both_steps=30
+max_text_steps=20
+max_image_steps=20
+max_both_steps=20
 seed=41
 
 # === 设置日志文件名 ===
@@ -26,7 +26,7 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=4 python main_janus.py \
+CUDA_VISIBLE_DEVICES=1 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
@@ -43,5 +43,6 @@ CUDA_VISIBLE_DEVICES=4 python main_janus.py \
     --device "cuda" \
     --reward_threshold "$reward_threshold" \
     --seed "$seed" \
+    --resume \
     > "$LOG_FILE" 2>&1 &
 

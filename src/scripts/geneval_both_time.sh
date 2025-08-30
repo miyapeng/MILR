@@ -1,19 +1,16 @@
 #!/bin/bash
 
-PATH_TO_DATA="prompts/Wise/spatio-temporal_reasoning.json"
+PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-output_dir="./Wise_results/seed41/spatio-temporal_reasoning"
-optimize_mode="text"  # or "image"
-reward_model_type="wise_reward"
-data_name="Wise"
-reward_threshold=-0.50
+output_dir="./geneval_results/Time_Analysis" #self create the dir
+optimize_mode="interleaved_text_image"  # or "image"
+reward_model_type="geneval"
 text_k=0.2 
 image_k=0.02 
 lr=0.03
-max_text_steps=30
-max_image_steps=30
-max_both_steps=30
-seed=41
+max_text_steps=20
+max_image_steps=20
+max_both_steps=20
 
 # === 设置日志文件名 ===
 if [ "$optimize_mode" = "text" ]; then
@@ -25,11 +22,10 @@ else
 fi
 
 # === 启动训练脚本 ===
-CUDA_VISIBLE_DEVICES=3 python main_janus.py \
+CUDA_VISIBLE_DEVICES=2 python main_janus_different_squences.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
-    --data_name "$data_name" \
     --optimize_mode "$optimize_mode" \
     --reward_model_type "$reward_model_type" \
     --lr "$lr" \
@@ -39,6 +35,4 @@ CUDA_VISIBLE_DEVICES=3 python main_janus.py \
     --max_image_steps "$max_image_steps" \
     --max_both_steps "$max_both_steps" \
     --device "cuda" \
-    --reward_threshold "$reward_threshold" \
-    --seed "$seed" \
     > "$LOG_FILE" 2>&1 &
