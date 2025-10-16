@@ -5,7 +5,7 @@ from process import get_dataset,save_image_and_metadata,set_seed
 from tqdm import tqdm
 
 from ori_generation_janus import original_generation
-from opt_generation_janus import optimized_generation
+from MILR.src.opt_generation_janus_variant import optimized_generation
 
 import argparse
 import numpy as np
@@ -98,13 +98,13 @@ def main(args):
     elif args.reward_model_type == "wise_reward":
         from rewards.wise_reward import WiseReward
         reward_model = WiseReward(
-            api_key='', 
+            api_key='', #fill the api key
             model='gpt-4o-2024-05-13',
         )
     elif args.reward_model_type == "gpt4o":
         from rewards.gpt4o_reward import GPT4oReward
         reward_model = GPT4oReward(
-            api_key='', 
+            api_key='', #fill the api key 
             model='gpt-4o-2024-11-20',
         )
     elif args.reward_model_type == "NVILA":

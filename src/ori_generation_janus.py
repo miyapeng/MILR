@@ -217,15 +217,3 @@ def original_generation(
     answer = Image.fromarray(visual_img[0])
 
     return answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, inputs_embeds_img.cpu(), image_gen_prompt
-
-
-# model_path = "deepseek-ai/Janus-Pro-7B"
-# vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
-
-# vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
-#     model_path, trust_remote_code=True
-# )
-# vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
-# input_text = "a photo of two toothbrushes."
-# answer, text_hidden_states_list, text_final_input_ids, image_hidden_states_list, image_prompt_ids, generated_image_tokens = original_generation(input_text, vl_gpt, vl_chat_processor, torch.device("cuda"))
-# print(f"Generated image size: {answer.size}")

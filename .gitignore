@@ -195,3 +195,5 @@ src/Bagel/models
 src/Wise_results
 src/Bagel/rewards/MixedReward/reward_weights
 src/Bagel/rewards/T2ICompBench/UniDet_eval/experts/expert_weights
+
+src/WISE/

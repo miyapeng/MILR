@@ -1,3 +1,23 @@
+# MILR: Improving Multimodal Image Generation via Test-Time Latent Reasoning
+
+<div align="center">
+
+[**Yapeng Mi**](https://scholar.google.com/citations?user=xr7kNGEAAAAJ&hl=zh-CN),
+[**Hengli Li**](https://scholar.google.com/citations?user=K7gsqkMAAAAJ&hl=en),
+[**Yanpeng Zhao**](https://scholar.google.com/citations?user=-T9FigIAAAAJ&hl=en),
+[**Chenxi Li**](https://openreview.net/profile?id=~Chenxi_Li7),
+[**Huimin Wu**](https://scholar.google.com/citations?user=9HH9I6YAAAAJ&hl=en),
+[**Xiaojian Ma**](https://jeasinema.github.io/),
+[**Song-Chun Zhu**](https://scholar.google.com/citations?user=Al8dyb4AAAAJ&hl=en),
+[**Ying Nian Wu**](https://scholar.google.com/citations?user=7k_1QFIAAAAJ&hl=en),
+[**Qing Li**](https://liqing.io/)
+
+[\[🌐 Project Page\]](https://miyapeng.github.io/milr/) [\[📜 Paper\]](https://www.arxiv.org/abs/2509.22761)
+</div>
+
+![teaser map](fig/teaser.png)
+
+We introduce MILR, a test-time method that performs joint reasoning over text and image in a unified latent space. It searches over vector representations of discrete text/image tokens using policy gradients guided by an image-quality critic, instantiated within the MUG framework (which supports language reasoning before image synthesis). MILR optimizes intermediate model outputs as the latent space, requiring no fine-tuning and operating entirely at inference time.
 
 ## Installation
 
@@ -82,17 +102,37 @@ CUDA_VISIBLE_DEVICES=1 python main_janus.py \
 - `max_image_steps`: the steps of image optimization
 - `max_both_steps`: the steps of both optimization
 
+### Different Rewards
+For `SelfReward`, you can run the script:
+```bash
+bash scripts/self_reward.sh 
+```
+For `UnifiedReward`, you can run the script:
+```bash
+bash scripts/unified_reward_geneval.sh 
+```
+remeber you download the `CodeGoat24/UnifiedReward-qwen-7b` model.
+
+For `MixedReward`, you can run the following script:
+```bash
+cd rewards/MixedReward
+git clone https://github.com/IDEA-Research/GroundingDINO.git ## follow the guide of https://github.com/IDEA-Research/GroundingDINO
+mkdir reward_weights
+wget -q https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
+huggingface-cli download microsoft/git-large-vqav2 --repo-type model --local-dir git-large-vqav2
+cd ../..
+bash scripts/unified_reward_geneval.sh 
+```
+
+For `GPT-4o` reward, you should first set the api key in `main_janus.py`, and run the following script:
+```bash
+bash scripts/geneval_gpt4o_reward.sh 
+```
+
+
 ### T2I-CompBench
-Coming soon....
+For T2I-CompBench,
 
-## Files for Modification
-
-* Main logic file: [main](./src/main.py)
-* Opt generation file (LatentSeek core): [opt](./src/opt_generation.py)
-* CoT generation file (original generation): [ori](./src/ori_generation.py)
-* Data: [data](./src/data.py)
-* Reward Model: [reward](./src/rewards/reward.py)
-* Self-Reward Prompts: [self-reward prompts](./src/prompts/vera_prompts.py)
-* CoT Prompts: [CoT prompts](./src/prompts/solver_prompts.py)
+### WISE
 
 

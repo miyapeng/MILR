@@ -1,19 +1,16 @@
 #!/bin/bash
 
-PATH_TO_DATA="prompts/Wise/cultural_common_sense.json"
+PATH_TO_DATA="prompts/geneval/evaluation_metadata.jsonl"
 PATH_TO_MODEL="deepseek-ai/Janus-Pro-7B"
-output_dir="./Wise_results/seed41/cultural_common_sense"
-optimize_mode="both"
-reward_model_type="wise_reward"
-data_name="Wise"
-reward_threshold=-0.50
+output_dir="./geneval_results/self_reward_result"
+optimize_mode="both"  # or "image"
+reward_model_type="self_reward"
 text_k=0.2 
 image_k=0.02 
 lr=0.03
 max_text_steps=20
 max_image_steps=20
 max_both_steps=20
-seed=41
 
 # === set log file name ===
 if [ "$optimize_mode" = "text" ]; then
@@ -29,7 +26,6 @@ CUDA_VISIBLE_DEVICES=0 python main_janus.py \
     --dataset "$PATH_TO_DATA" \
     --model_name_or_path "$PATH_TO_MODEL" \
     --output_dir "$output_dir" \
-    --data_name "$data_name" \
     --optimize_mode "$optimize_mode" \
     --reward_model_type "$reward_model_type" \
     --lr "$lr" \
@@ -39,6 +35,4 @@ CUDA_VISIBLE_DEVICES=0 python main_janus.py \
     --max_image_steps "$max_image_steps" \
     --max_both_steps "$max_both_steps" \
     --device "cuda" \
-    --reward_threshold "$reward_threshold" \
-    --seed "$seed" \
     > "$LOG_FILE" 2>&1 &
