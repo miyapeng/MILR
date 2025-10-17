@@ -25,13 +25,11 @@ class WiseReward:
             model: Name of the model to use.
             api_base: Optional base URL for custom OpenAI deployments.
         """
-        # REGION = "eastus"
-        # REGION = "eastus2"
-        REGION = "northcentralus"
+        
+        REGION = ""
         MODEL = model
         API_KEY = api_key
-        # API_BASE = "http://123.127.249.51/proxy"
-        API_BASE = "https://api.tonggpt.mybigai.ac.cn/proxy"
+        API_BASE = ""
         ENDPOINT = f"{API_BASE}/{REGION}"
 
         self.client = AzureOpenAI(
@@ -39,6 +37,7 @@ class WiseReward:
             api_version="2025-03-01-preview",
             azure_endpoint=ENDPOINT,
         )
+
         # openai.api_key = api_key
         # if api_base:
         #     openai.api_base = api_base
@@ -222,21 +221,3 @@ class WiseReward:
             return False
         else:
             return True
-
-# # Example usage
-# if __name__ == '__main__':
-#     # Example prompt_data
-#     example = {
-#         'prompt_id': 1,
-#         'tag': 'Cultural knowledge',
-#         'subcategory': 'Festival',
-#         'prompt': 'Traditional food of the Mid-Autumn Festival',
-#         'explanation': 'This refers to mooncakes, the round pastries filled with lotus seed paste or red bean paste'
-#     }
-#     # Load test image
-#     test_image = Image.open('/media/raid/workspace/miyapeng/T2I-R1/src/t2i-r1/src/generated_samples_test7/img_3.jpg')  # Replace with your test image path
-#     # Initialize evaluator
-#     wr = WiseReward(api_key='64cd78bc94b8b7d6f02ee4263c3ed709', model='gpt-4o-2024-05-13')
-#     # Perform evaluation
-#     result_scores = wr.get_reward(example, test_image)
-#     print('Evaluation results:', result_scores)

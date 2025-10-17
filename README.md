@@ -105,11 +105,11 @@ CUDA_VISIBLE_DEVICES=1 python main_janus.py \
 ### Different Rewards
 For `SelfReward`, you can run the script:
 ```bash
-bash scripts/self_reward.sh 
+bash scripts/geneval_self_reward.sh 
 ```
 For `UnifiedReward`, you can run the script:
 ```bash
-bash scripts/unified_reward_geneval.sh 
+bash scripts/geneval_unified_reward.sh 
 ```
 remeber you download the `CodeGoat24/UnifiedReward-qwen-7b` model.
 
@@ -131,8 +131,31 @@ bash scripts/geneval_gpt4o_reward.sh
 
 
 ### T2I-CompBench
-For T2I-CompBench,
+For T2I-CompBench, we use this benchmark from `https://github.com/Karine-Huang/T2I-CompBench`
+And you should follow the guidence of the repo to install the environment, and put the weights into the `scripts/T2ICompBench`
 
+then you can run the scripts in `scripts/T2I-CompBench` as follows:
+```bash
+bash scripts/T2I-CompBench/MetricReward_T2ICompBench_color.sh 
+```
 ### WISE
+For WISE, we use this benchmark from `https://github.com/PKU-YuanGroup/WISE`.
+You also should install the environment following the guidences and fill the right api key into `rewards/wise_reward.py`.
 
+Then you can run the script as follows:
+```bash
+bash scripts/Wise/wise_reward_wise_cultural_common_sense.sh 
+```
 
+## Citation
+```bibtex
+@article{mi2025milr,
+  title={MILR: Improving Multimodal Image Generation via Test-Time Latent Reasoning},
+  author={Mi, Yapeng and Li, Hengli and Zhao, Yanpeng and Li, Chenxi and Wu, Huimin and Ma, Xiaojian and Zhu, Song-Chun and Wu, Ying Nian and Li, Qing},
+  journal={arXiv preprint arXiv:2509.22761},
+  year={2025}
+}
+```
+
+## Contact
+* If you have any questions, please send me an email at: miyapeng78@gmail.com
